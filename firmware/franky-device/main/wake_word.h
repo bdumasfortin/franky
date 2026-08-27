@@ -22,6 +22,9 @@ typedef struct {
 esp_err_t wake_word_init(wake_word_detected_callback_t callback);
 esp_err_t wake_word_pause(void);
 esp_err_t wake_word_resume(void);
+const char *wake_word_engine_name(void);
+const char *wake_word_phrase_id(void);
+const char *wake_word_phrase_display_name(void);
 esp_err_t wake_word_capture_utterance(
     uint32_t speech_start_timeout_ms,
     uint32_t max_speech_ms,

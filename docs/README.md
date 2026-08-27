@@ -19,6 +19,8 @@ the authoritative history for consequential choices.
 - [Franky control board](../tools/franky-control-board/README.md) — run the
   browser interface and exercise audio, LEDs, wake detection, and transcription.
 - [Firmware](../firmware/README.md) — understand and flash the ESP32-side project.
+- [Wake-word training](../tools/wake-word/README.md) — generate the local “Yo
+  Franky” model used by custom firmware builds.
 - [Computer runtime](../services/README.md) — understand the .NET host boundary.
 - [OpenAI API development](development/openai-api.md) — configure the optional
   cloud conversation provider and understand its privacy boundary.

@@ -35,6 +35,11 @@ firmware/**/managed_components/
 firmware/**/sdkconfig
 firmware/**/sdkconfig.old
 firmware/**/dependencies.lock
+firmware/franky-device/main/models/*.tflite
+
+# Locally trained wake-word data and model artifacts
+tools/wake-word/.cache/
+tools/wake-word/.venv/
 
 # IDE and operating system files
 .idea/

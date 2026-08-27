@@ -7,7 +7,14 @@ Franky is a personal, from-scratch voice assistant built from:
 - custom firmware on a Waveshare ESP32-S3-AUDIO-Board; and
 - a custom .NET runtime on the computer for speech, conversation, safe commands, and future home integrations.
 
-The working development path uses USB serial. Microphone capture, **“Hi ESP”** wake detection, voice-activity endpointing, speaker cues, status LEDs, and local Whisper transcription are verified. Authenticated Wi-Fi/WebSocket transport, transcript-to-conversation wiring, and spoken responses remain planned. Franky does not depend on the official Home Assistant platform.
+The working development path uses USB serial. Microphone capture, **“Hi ESP”**
+fallback wake detection, voice-activity endpointing, speaker cues, status LEDs,
+and local Whisper transcription are verified. A custom **“Yo Franky”** model is
+trained, flashed, boot-stable, and verified in an initial physical spoken test.
+Longer-term miss and false-activation behavior is still being observed.
+Authenticated Wi-Fi/WebSocket transport,
+transcript-to-conversation wiring, and spoken responses remain planned. Franky
+does not depend on the official Home Assistant platform.
 
 ## Working rules
 

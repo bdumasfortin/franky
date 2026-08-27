@@ -40,7 +40,15 @@ transport without moving speech recognition or command execution onto the board.
 
 Use one .NET 10 computer application with explicit internal boundaries for device sessions, speech adapters, conversation, capabilities, and diagnostics. Model and speech providers remain replaceable. Split a boundary into another process only when measurement or a native dependency provides a concrete reason.
 
-The first speech-to-text provider runs Whisper locally through Whisper.net. During the USB development phase, the same .NET process serves the Franky control board and its loopback-only transcription endpoint. The ESP32 uses its existing ESP-SR Audio Front End to end wake utterances after trailing silence. [ADR-0007](../adr/0007-use-local-whisper-for-speech-to-text.md) records this decision.
+The first speech-to-text provider runs Whisper locally through Whisper.net.
+During the USB development phase, the same .NET process serves the Franky
+control board and its loopback-only transcription endpoint. The ESP32 retains
+its ESP-SR Audio Front End for microphone processing and trailing-silence
+endpointing, and runs the custom “Yo Franky” streaming model through TensorFlow
+Lite Micro. [ADR-0007](../adr/0007-use-local-whisper-for-speech-to-text.md)
+records the transcription choice and
+[ADR-0008](../adr/0008-use-custom-microwakeword-model-for-yo-franky.md)
+records the wake-model choice.
 
 ## Target Wi-Fi communication shape
 

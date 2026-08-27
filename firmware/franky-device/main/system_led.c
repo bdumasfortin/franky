@@ -11,8 +11,11 @@
 
 #define LED_STRIP_GPIO 38
 #define LED_STRIP_COUNT 7
-#define BREATH_FRAME_MS 40
-#define BREATH_PHASE_STEPS 100
+#define BREATH_FRAME_MS 10
+#define BREATH_CYCLE_MS 4000
+#define BREATH_PHASE_STEPS (BREATH_CYCLE_MS / BREATH_FRAME_MS)
+#define BRIGHTNESS_SCALE 1000
+#define COLOR_COMPONENT_COUNT 3
 
 typedef struct {
     const char *name;
@@ -37,15 +40,35 @@ static const state_color_t s_colors[] = {
 static led_strip_handle_t s_strip;
 static SemaphoreHandle_t s_lock;
 static volatile system_led_state_t s_state = SYSTEM_LED_OFFLINE;
+static uint16_t s_dither_error[LED_STRIP_COUNT][COLOR_COMPONENT_COUNT];
 
-static esp_err_t render_color(state_color_t color, uint8_t brightness_percent)
+static uint8_t render_component(
+    uint8_t component,
+    uint16_t brightness,
+    int pixel,
+    int component_index)
 {
-    const uint8_t red = (uint8_t)((color.red * brightness_percent + 50) / 100);
-    const uint8_t green = (uint8_t)((color.green * brightness_percent + 50) / 100);
-    const uint8_t blue = (uint8_t)((color.blue * brightness_percent + 50) / 100);
+    const uint32_t scaled = component * brightness;
+    uint8_t value = (uint8_t)(scaled / BRIGHTNESS_SCALE);
+    const uint16_t remainder = (uint16_t)(scaled % BRIGHTNESS_SCALE);
 
+    uint16_t accumulated = s_dither_error[pixel][component_index] + remainder;
+    if (accumulated >= BRIGHTNESS_SCALE && value < UINT8_MAX) {
+        ++value;
+        accumulated -= BRIGHTNESS_SCALE;
+    }
+    s_dither_error[pixel][component_index] = accumulated;
+
+    return value;
+}
+
+static esp_err_t render_color(state_color_t color, uint16_t brightness)
+{
     esp_err_t error = ESP_OK;
     for (int pixel = 0; pixel < LED_STRIP_COUNT && error == ESP_OK; ++pixel) {
+        const uint8_t red = render_component(color.red, brightness, pixel, 0);
+        const uint8_t green = render_component(color.green, brightness, pixel, 1);
+        const uint8_t blue = render_component(color.blue, brightness, pixel, 2);
         error = led_strip_set_pixel(s_strip, pixel, red, green, blue);
     }
     if (error == ESP_OK) {
@@ -63,13 +86,19 @@ static void breathing_task(void *argument)
         if (s_state == SYSTEM_LED_OFFLINE &&
             xSemaphoreTake(s_lock, pdMS_TO_TICKS(BREATH_FRAME_MS)) == pdTRUE) {
             if (s_state == SYSTEM_LED_OFFLINE) {
-                const uint32_t triangle = phase <= BREATH_PHASE_STEPS / 2
-                    ? phase * 2
-                    : (BREATH_PHASE_STEPS - phase) * 2;
+                const uint32_t half_cycle = BREATH_PHASE_STEPS / 2;
+                const uint32_t distance = phase <= half_cycle
+                    ? phase
+                    : BREATH_PHASE_STEPS - phase;
+                const uint32_t triangle =
+                    (distance * BRIGHTNESS_SCALE + half_cycle / 2) / half_cycle;
                 // Smoothstep turns the linear triangle into a gentle inhale/exhale.
                 const uint32_t eased =
-                    (triangle * triangle * (300 - 2 * triangle) + 5000) / 10000;
-                const uint8_t brightness = (uint8_t)(20 + (80 * eased) / 100);
+                    (triangle * triangle * (3 * BRIGHTNESS_SCALE - 2 * triangle) +
+                     500000) /
+                    1000000;
+                const uint16_t brightness =
+                    (uint16_t)(200 + (800 * eased) / BRIGHTNESS_SCALE);
                 render_color(s_colors[SYSTEM_LED_OFFLINE], brightness);
                 phase = (phase + 1) % BREATH_PHASE_STEPS;
             }
@@ -108,6 +137,16 @@ esp_err_t system_led_init(void)
         return ESP_ERR_NO_MEM;
     }
 
+    // Stagger sub-step rounding across the ring. At low brightness this turns
+    // coarse 8-bit channel jumps into a much smoother perceived transition.
+    for (int pixel = 0; pixel < LED_STRIP_COUNT; ++pixel) {
+        const uint16_t seed =
+            (uint16_t)((pixel * BRIGHTNESS_SCALE) / LED_STRIP_COUNT);
+        for (int component = 0; component < COLOR_COMPONENT_COUNT; ++component) {
+            s_dither_error[pixel][component] = seed;
+        }
+    }
+
     if (xTaskCreate(breathing_task, "led_breath", 2048, NULL, 1, NULL) != pdPASS) {
         return ESP_ERR_NO_MEM;
     }
@@ -127,7 +166,8 @@ esp_err_t system_led_set_state(system_led_state_t state)
     }
 
     s_state = state;
-    const uint8_t brightness = state == SYSTEM_LED_OFFLINE ? 20 : 100;
+    const uint16_t brightness =
+        state == SYSTEM_LED_OFFLINE ? 200 : BRIGHTNESS_SCALE;
     const esp_err_t error = render_color(s_colors[state], brightness);
 
     xSemaphoreGive(s_lock);

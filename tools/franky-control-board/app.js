@@ -32,6 +32,8 @@ const els = {
   wakeCaptureMode: document.querySelector('#wakeCaptureMode'),
   deviceConnection: document.querySelector('#deviceConnection'),
   deviceAudioFormat: document.querySelector('#deviceAudioFormat'),
+  firmwareReadout: document.querySelector('#firmwareReadout'),
+  wakeEngineDetail: document.querySelector('#wakeEngineDetail'),
   terminalLog: document.querySelector('#terminalLog'),
   terminalPauseButton: document.querySelector('#terminalPauseButton'),
   terminalClearButton: document.querySelector('#terminalClearButton'),
@@ -76,6 +78,27 @@ let transcriptionInFlight = false;
 let transcriptionSequence = 0;
 let wakeCount = 0;
 let currentState = 'offline';
+let wakeProfile = {
+  engineId: 'microwakeword',
+  engineLabel: 'microWakeWord',
+  phraseId: 'yo_franky',
+  phraseLabel: 'Yo Franky',
+};
+
+function setWakeProfile(engineId, phraseId) {
+  const phraseLabels = { yo_franky: 'Yo Franky', hi_esp: 'Hi ESP' };
+  const engineLabels = { microwakeword: 'microWakeWord', wakenet9: 'WakeNet9' };
+  wakeProfile = {
+    engineId,
+    engineLabel: engineLabels[engineId] || engineId,
+    phraseId,
+    phraseLabel: phraseLabels[phraseId] || phraseId.replaceAll('_', ' '),
+  };
+  els.wakeEngineDetail.textContent = wakeProfile.engineLabel;
+  if (isConnected() && !recordingContext && !transcriptionInFlight) {
+    els.wakeStatus.textContent = `Listening for “${wakeProfile.phraseLabel}”`;
+  }
+}
 
 function isConnected() {
   return els.appRoot.dataset.connected === 'true';
@@ -169,7 +192,7 @@ function setConnection(connected, { announce = true } = {}) {
     els.linkReadout.textContent = 'Stable';
     els.wakeEngineReadout.textContent = 'Armed';
     els.deviceConnection.textContent = 'USB serial · connected';
-    els.wakeStatus.textContent = 'Listening for “Hi ESP”';
+    els.wakeStatus.textContent = `Listening for “${wakeProfile.phraseLabel}”`;
     setCaptureStatus('Ready', '16 kHz · 16-bit · raw stereo');
     setSystemState('idle', { announce });
     void refreshTranscriptionStatus();
@@ -178,6 +201,7 @@ function setConnection(connected, { announce = true } = {}) {
     els.wakeEngineReadout.textContent = 'Offline';
     els.deviceConnection.textContent = 'USB serial · disconnected';
     els.wakeStatus.textContent = 'Wake engine offline';
+    els.wakeEngineDetail.textContent = 'Offline';
     els.sttStatus.textContent = 'Offline';
     setCaptureStatus('Offline', 'Connect to Franky to begin');
     setSystemState('offline', { announce: false });
@@ -266,13 +290,22 @@ function handleLine(line) {
     const channels = Number(parts[4] ?? 2);
     const bits = Number(parts[5] ?? 16);
     const gain = Number(parts[6] ?? 30);
+    const protocolVersion = Number(parts[2] ?? 0);
     if (Number.isFinite(gain)) els.gainSelect.value = String(gain);
+    if (Number.isFinite(protocolVersion)) els.firmwareReadout.textContent = `Franky Device v${protocolVersion}`;
     els.deviceAudioFormat.textContent = `${sampleRate / 1000} kHz · ${bits}-bit · ${channels === 2 ? 'stereo' : `${channels} ch`}`;
     setConnection(true, { announce: false });
     startHeartbeat();
     appendTerminal('LINK', 'Franky connected over USB serial');
     appendTerminal('AUDIO', `Microphone array ready · ${sampleRate / 1000} kHz · ${channels === 2 ? 'stereo' : `${channels} channels`} · ${gain} dB`);
-    appendTerminal('WAKE', 'WakeNet9 armed · phrase “Hi ESP”');
+    return;
+  }
+
+  if (line.startsWith('WAKE_ENGINE ')) {
+    const [, engineId, phraseId] = line.split(/\s+/);
+    if (!engineId || !phraseId) return;
+    setWakeProfile(engineId, phraseId);
+    appendTerminal('WAKE', `${wakeProfile.engineLabel} armed · phrase “${wakeProfile.phraseLabel}”`);
     return;
   }
 
@@ -283,19 +316,22 @@ function handleLine(line) {
     return;
   }
 
-  if (line === 'WAKE hi_esp') {
+  if (line.startsWith('WAKE ')) {
+    const phraseId = line.split(/\s+/)[1];
+    if (!phraseId) return;
+    if (phraseId !== wakeProfile.phraseId) setWakeProfile(wakeProfile.engineId, phraseId);
     wakeCount += 1;
     const detectedAt = new Date();
     els.wakeCount.textContent = String(wakeCount).padStart(2, '0');
     els.lastWake.textContent = detectedAt.toLocaleTimeString([], {
       hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
     });
-    els.wakeStatus.textContent = 'Heard “Hi ESP”';
+    els.wakeStatus.textContent = `Heard “${wakeProfile.phraseLabel}”`;
     els.wakeMonitor.classList.add('wake-monitor-detected');
     clearTimeout(wakePulseTimer);
     wakePulseTimer = setTimeout(() => els.wakeMonitor.classList.remove('wake-monitor-detected'), 900);
     recordingContext = {
-      label: `Wake ${wakeCount} · Hi ESP`,
+      label: `Wake ${wakeCount} · ${wakeProfile.phraseLabel}`,
       channelMode: 'stereo',
       gain: Number(els.gainSelect.value),
       source: 'wake',
@@ -305,7 +341,7 @@ function handleLine(line) {
     for (const button of els.stateButtons) button.disabled = true;
     setSystemState('success');
     setCaptureStatus('Wake word detected', 'Waiting for your voice');
-    appendTerminal('WAKE', 'Detected “Hi ESP” · waiting for speech');
+    appendTerminal('WAKE', `Detected “${wakeProfile.phraseLabel}” · waiting for speech`);
     return;
   }
 
@@ -334,7 +370,7 @@ function handleLine(line) {
   if (line === 'NO_SPEECH') {
     finishCapture();
     recordingContext = undefined;
-    els.wakeStatus.textContent = 'Nothing heard · listening for “Hi ESP”';
+    els.wakeStatus.textContent = `Nothing heard · listening for “${wakeProfile.phraseLabel}”`;
     els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
     els.transcriptMeta.textContent = 'Latest wake contained no speech';
     setCaptureStatus('Ready', 'No speech followed the wake word');
@@ -703,7 +739,7 @@ function addRecording(header, pcm) {
   requestAnimationFrame(() => drawWaveform(card.querySelector('.waveform'), selected.pcm, selected.channels));
   updateEmptyState();
   setCaptureStatus('Recording ready', 'Press play or start another capture');
-  els.wakeStatus.textContent = 'Listening for “Hi ESP”';
+  els.wakeStatus.textContent = `Listening for “${wakeProfile.phraseLabel}”`;
   appendTerminal('AUDIO', `Recording ready · ${durationSeconds.toFixed(1)} seconds · peak ${formatDb(levels.peakDb)} · RMS ${formatDb(levels.rmsDb)}`);
   if (isConnected()) setSystemState('idle');
 }
@@ -730,7 +766,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
     if (!transcript) {
       els.lastTranscript.textContent = 'Nothing understood.';
       els.transcriptMeta.textContent = `${result.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s · no text returned`;
-      els.wakeStatus.textContent = 'No speech recognized · listening for “Hi ESP”';
+      els.wakeStatus.textContent = `No speech recognized · listening for “${wakeProfile.phraseLabel}”`;
       els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
       setCaptureStatus('Ready', 'The clip did not contain recognizable speech');
       appendTerminal('HEARD', 'No recognizable speech in the utterance');
@@ -741,7 +777,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
     els.lastTranscript.textContent = transcript;
     els.transcriptMeta.textContent =
       `${result.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s audio · ${(result.elapsedMs / 1000).toFixed(1)} s processing`;
-    els.wakeStatus.textContent = 'Transcript ready · listening for “Hi ESP”';
+    els.wakeStatus.textContent = `Transcript ready · listening for “${wakeProfile.phraseLabel}”`;
     els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
     setCaptureStatus('Transcript ready', 'Wake audio was discarded after local transcription');
     appendTerminal('HEARD', transcript, 'transcript-line');

@@ -14,6 +14,9 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+#include "wake_word_model.h"
+#endif
 
 #define WAKE_INPUT_FORMAT "RMNM"
 #define WAKE_TASK_STACK_SIZE (8 * 1024)
@@ -42,6 +45,7 @@ static size_t s_capture_elapsed_samples;
 static size_t s_capture_start_timeout_samples;
 static bool s_capture_speech_started;
 static wake_utterance_end_t s_capture_end_reason;
+static bool s_using_custom_model;
 static bool s_initialized;
 
 static size_t append_capture_samples(const int16_t *samples, size_t sample_count)
@@ -142,12 +146,39 @@ static void feed_task(void *argument)
 
         if (s_detection_enabled) {
             s_afe->feed(s_afe_data, samples);
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+            if (s_using_custom_model) vTaskDelay(1);
+#endif
         }
     }
 }
 
+static void disarm_wake_engine(void)
+{
+    if (!s_using_custom_model) s_afe->disable_wakenet(s_afe_data);
+}
+
+static void reset_wake_engine(void)
+{
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (s_using_custom_model) {
+        franky_wake_model_reset();
+        return;
+    }
+#endif
+    s_afe->enable_wakenet(s_afe_data);
+}
+
 static bool result_is_wake(const afe_fetch_result_t *result)
 {
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (s_using_custom_model) {
+        if (result->data == NULL || result->data_size <= 0) return false;
+        return franky_wake_model_process(
+            result->data,
+            (size_t)result->data_size / sizeof(int16_t));
+    }
+#endif
     if (result->raw_data_channels == 1) {
         return result->wakeup_state == WAKENET_DETECTED;
     }
@@ -170,7 +201,7 @@ static void detect_task(void *argument)
 
         if (s_detection_enabled && s_wake_armed && !s_capture_active && result_is_wake(result)) {
             s_wake_armed = false;
-            s_afe->disable_wakenet(s_afe_data);
+            disarm_wake_engine();
             if (s_callback != NULL) s_callback();
         }
     }
@@ -179,6 +210,15 @@ static void detect_task(void *argument)
 esp_err_t wake_word_init(wake_word_detected_callback_t callback)
 {
     if (callback == NULL || s_initialized) return ESP_ERR_INVALID_STATE;
+
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    esp_err_t custom_model_error = franky_wake_model_init();
+    s_using_custom_model = custom_model_error == ESP_OK;
+    if (!s_using_custom_model) {
+        ESP_LOGW(TAG, "Yo Franky model unavailable (%s); using WakeNet fallback",
+                 esp_err_to_name(custom_model_error));
+    }
+#endif
 
     s_models = esp_srmodel_init("model");
     if (s_models == NULL) return ESP_FAIL;
@@ -196,6 +236,7 @@ esp_err_t wake_word_init(wake_word_detected_callback_t callback)
     config->vad_min_speech_ms = 128;
     config->vad_min_noise_ms = VAD_TRAILING_SILENCE_MS;
     config->vad_delay_ms = 160;
+    config->wakenet_init = !s_using_custom_model;
     s_afe = esp_afe_handle_from_config(config);
     if (s_afe == NULL) {
         afe_config_free(config);
@@ -246,7 +287,7 @@ esp_err_t wake_word_pause(void)
     if (!s_initialized || s_capture_active) return ESP_ERR_INVALID_STATE;
 
     s_wake_armed = false;
-    s_afe->disable_wakenet(s_afe_data);
+    disarm_wake_engine();
     s_detection_enabled = false;
     xEventGroupClearBits(s_events, FEED_PAUSED_BIT);
     EventBits_t bits = xEventGroupWaitBits(
@@ -258,6 +299,9 @@ esp_err_t wake_word_pause(void)
     if ((bits & FEED_PAUSED_BIT) == 0) return ESP_ERR_TIMEOUT;
 
     s_afe->reset_buffer(s_afe_data);
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (s_using_custom_model) franky_wake_model_reset();
+#endif
     return ESP_OK;
 }
 
@@ -268,10 +312,25 @@ esp_err_t wake_word_resume(void)
     if (!s_detection_enabled) s_afe->reset_buffer(s_afe_data);
     s_afe->reset_vad(s_afe_data);
     s_afe->enable_vad(s_afe_data);
-    s_afe->enable_wakenet(s_afe_data);
+    reset_wake_engine();
     s_wake_armed = true;
     s_detection_enabled = true;
     return ESP_OK;
+}
+
+const char *wake_word_engine_name(void)
+{
+    return s_using_custom_model ? "microwakeword" : "wakenet9";
+}
+
+const char *wake_word_phrase_id(void)
+{
+    return s_using_custom_model ? "yo_franky" : "hi_esp";
+}
+
+const char *wake_word_phrase_display_name(void)
+{
+    return s_using_custom_model ? "Yo Franky" : "Hi ESP";
 }
 
 esp_err_t wake_word_capture_utterance(

@@ -31,6 +31,10 @@ generation.
 - Stereo microphone capture verified from close range to roughly 12 feet.
 - Speaker cues and seven-pixel state LEDs verified.
 - Local WakeNet9 **“Hi ESP”** detection verified.
+- Reproducible custom **“Yo Franky”** microWakeWord training workspace, quantized
+  model, TensorFlow Lite Micro integration, and WakeNet fallback implemented.
+- Model-enabled firmware built, flashed, booted, observed idle without watchdog
+  faults, and verified through a successful physical spoken test.
 - Voice-activity endpointing and bounded mono wake capture verified.
 - Local Whisper `small.en` transcription working with NVIDIA GPU acceleration and CPU fallback.
 - State-driven browser control board working over USB serial.
@@ -51,7 +55,8 @@ Connect the wake transcript to the existing conversation and safe-command path:
 2. Stream or send the generated response to the board speaker.
 3. Extend the draft protocol for wake-triggered utterances.
 4. Implement authenticated Wi-Fi/WebSocket transport and reconnect behavior.
-5. Replace the built-in development wake phrase with the selected Franky phrase.
+5. Tune the custom “Yo Franky” model with real-room positives or hard negatives
+   only if ordinary use exposes misses or false activations.
 
 ## Validation gates
 

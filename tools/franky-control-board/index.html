@@ -108,8 +108,8 @@
 
             <div id="wakeMonitor" class="feature-panel" data-feature-panel="wake">
               <div class="wake-card">
-                <span id="wakeStatus" class="wake-phrase">Listening for “Hi ESP”</span>
-                <p>WakeNet listens locally on the board. Future wake-word candidates are “Yo Franky” and “Franky.”</p>
+                <span id="wakeStatus" class="wake-phrase">Wake engine offline</span>
+                <p>The wake phrase is detected locally on the board, without sending room audio to the computer.</p>
               </div>
               <div class="wake-stats">
                 <div>Session detections<strong id="wakeCount">0</strong></div>
@@ -118,7 +118,7 @@
               </div>
               <div class="transcript-card">
                 <span>Last transcript</span>
-                <p id="lastTranscript">Say “Hi ESP” and then speak naturally.</p>
+                <p id="lastTranscript">Connect to Franky, say the wake phrase, then speak naturally.</p>
                 <small id="transcriptMeta">Local Whisper · transcripts are not saved</small>
               </div>
               <div class="feature-note"><strong id="wakeCaptureMode">Natural endpointing enabled</strong><span>Franky stops listening after trailing silence, with a 20-second safety cap.</span></div>
@@ -126,11 +126,11 @@
 
             <div class="feature-panel" data-feature-panel="device">
               <div class="device-grid">
-                <div><span>Firmware</span><strong>Franky Device v3</strong></div>
+                <div><span>Firmware</span><strong id="firmwareReadout">Franky Device</strong></div>
                 <div><span>Connection</span><strong id="deviceConnection">USB serial</strong></div>
                 <div><span>Microphones</span><strong>ES7210 · stereo</strong></div>
                 <div><span>Speaker</span><strong>ES8311 · ready</strong></div>
-                <div><span>Wake engine</span><strong>WakeNet9</strong></div>
+                <div><span>Wake engine</span><strong id="wakeEngineDetail">Offline</strong></div>
                 <div><span>Audio stream</span><strong id="deviceAudioFormat">16 kHz · 16-bit</strong></div>
               </div>
             </div>

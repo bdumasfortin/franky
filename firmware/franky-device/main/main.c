@@ -38,6 +38,19 @@ static float s_gain_db = DEFAULT_GAIN_DB;
 
 static void start_recording(uint32_t duration_ms);
 
+static void print_device_info(void)
+{
+    printf(
+        "READY FRANKY_DEVICE 4 %u %u 16 %.1f\n",
+        FRANKY_SAMPLE_RATE,
+        FRANKY_CHANNELS,
+        s_gain_db);
+    printf(
+        "WAKE_ENGINE %s %s\n",
+        wake_word_engine_name(),
+        wake_word_phrase_id());
+}
+
 static uint32_t now_ms(void)
 {
     return (uint32_t)(esp_timer_get_time() / 1000);
@@ -213,7 +226,7 @@ static void start_recording(uint32_t duration_ms)
 static void wake_action_task(void *argument)
 {
     (void)argument;
-    printf("WAKE hi_esp\n");
+    printf("WAKE %s\n", wake_word_phrase_id());
     show_state(SYSTEM_LED_SUCCESS);
     esp_err_t cue_error = audio_board_play_cue(AUDIO_CUE_WAKE_WORD);
     if (cue_error != ESP_OK) {
@@ -320,11 +333,7 @@ static void handle_command(char *line)
         if (!s_recording) {
             show_state(SYSTEM_LED_IDLE);
         }
-        printf(
-            "READY FRANKY_DEVICE 3 %u %u 16 %.1f\n",
-            FRANKY_SAMPLE_RATE,
-            FRANKY_CHANNELS,
-            s_gain_db);
+        print_device_info();
         return;
     }
 
@@ -391,11 +400,7 @@ void app_main(void)
     esp_log_level_set("*", ESP_LOG_WARN);
     ESP_ERROR_CHECK(wake_word_init(wake_word_detected));
 
-    printf(
-        "READY FRANKY_DEVICE 3 %u %u 16 %.1f\n",
-        FRANKY_SAMPLE_RATE,
-        FRANKY_CHANNELS,
-        s_gain_db);
+    print_device_info();
 
     char command[96];
     while (true) {

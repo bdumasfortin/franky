@@ -27,6 +27,12 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
 - The user judged later recordings to be very good from close range through roughly 12 feet using 30 dB input gain and raw stereo.
 - The seven-pixel RGB ring was manually verified across the project state colors, including the amber offline breathing animation.
 - The WakeNet9 **“Hi ESP”** model was built, flashed, initialized, and repeatedly triggered from spoken input.
+- A locally trained 62,304-byte microWakeWord **“Yo Franky”** model was built
+  into firmware, flashed, booted, and reported as the active engine. After a
+  cooperative feed-task scheduling fix, the board remained idle for at least
+  15 seconds without a watchdog event.
+- The user then spoke **“Yo Franky”** to the physical board and reported that
+  detection worked very nicely through the existing cue, capture, and control-board flow.
 - After wake detection, the ESP-SR Audio Front End captured speech until trailing silence and delivered bounded mono audio for local Whisper transcription.
 - Connection, disconnection, and wake acknowledgement cues were heard through the ES8311 speaker path.
 
@@ -57,3 +63,4 @@ ESP-IDF 5.5.2 was prepared in response to the bring-up review choice. It is an e
 - Battery or external-power behavior.
 - Wi-Fi connectivity.
 - Restoration of the factory backup after custom firmware use.
+- Longer-term “Yo Franky” miss rate and false-activation behavior in ordinary use.

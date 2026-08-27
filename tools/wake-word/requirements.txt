@@ -1,0 +1,19 @@
+# Training/runtime packages are intentionally pinned: the upstream notebooks are
+# sensitive to TensorFlow, NumPy, and feature-generator changes.
+tensorflow==2.21.0
+tensorboard==2.21.0
+ai-edge-litert==2.2.0
+numpy==2.2.6
+datasets==5.0.1
+fsspec==2026.6.0
+mmap-ninja==0.9.0
+pymicro-features==2.0.2
+webrtcvad-wheels==2.0.14
+torchcodec==0.11.1
+
+# audio-metadata's released pin conflicts with current notebook dependencies.
+git+https://github.com/whatsnowplaying/audio-metadata@d4ebb238e6a401bb1a5aaaac60c9e2b3cb30929f
+
+# Pin the two model-generation projects to reviewed commits.
+git+https://github.com/OHF-Voice/micro-wake-word.git@4665173cd35f1cff9a61e06fc427f124766c488e
+git+https://github.com/rhasspy/piper-sample-generator.git@2971426a55072f7d22fec416ca7800df8bd23207

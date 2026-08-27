@@ -58,11 +58,25 @@ Each utterance has an opaque `utterance_id`. Control messages carry that identif
 
 ## Wake-driven input extension
 
-The working USB prototype detects **“Hi ESP”** locally, plays an acknowledgement,
-keeps a short pre-roll, captures until trailing silence, and sends one bounded
-mono utterance to the computer. Before network implementation, this document
-must define the corresponding wake event, utterance metadata, size limits,
-acknowledgements, cancellation behavior, and retry policy.
+The working USB prototype detects a wake phrase locally, plays an
+acknowledgement, keeps a short pre-roll, captures until trailing silence, and
+sends one bounded mono utterance to the computer. The current custom build uses
+**“Yo Franky”** through microWakeWord; **“Hi ESP”** WakeNet remains a fallback.
+Before network implementation, this document must define the corresponding wake
+event, utterance metadata, size limits, acknowledgements, cancellation behavior,
+and retry policy.
+
+The USB development protocol is version 4 and reports its active configuration
+after each `READY` line:
+
+```text
+READY FRANKY_DEVICE 4 16000 2 16 30.0
+WAKE_ENGINE microwakeword yo_franky
+```
+
+Fallback firmware reports `WAKE_ENGINE wakenet9 hi_esp`. A detection uses the
+same phrase identifier, for example `WAKE yo_franky`. The browser must render
+the reported engine and phrase rather than assuming one.
 
 ## Assistant state
 

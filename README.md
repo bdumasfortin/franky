@@ -8,14 +8,18 @@ and a custom .NET runtime on the computer. The board handles room audio, the
 wake word, speaker cues, and status LEDs; the computer handles local speech
 recognition and will grow into conversation and home-control features.
 
-> **Current state:** the USB development path is working end to end from
-> “Hi ESP” to a locally generated transcript. Wi-Fi transport, command
-> interpretation, and spoken answers are the next major pieces.
+> **Current state:** the USB development path works end to end from a wake
+> phrase to a local transcript. A custom **“Yo Franky”** model is now trained,
+> flashed, and successfully recognized in its first physical-room test. Longer
+> use will reveal whether its sensitivity needs tuning.
+> Wi-Fi transport, command interpretation, and spoken answers remain ahead.
 
 ## What works today
 
 - Far-field stereo microphone capture from close range to roughly 12 feet.
-- On-device **“Hi ESP”** detection with Espressif WakeNet9.
+- On-device wake detection: the previously verified **“Hi ESP”** WakeNet path
+  remains a fallback, while the custom **“Yo Franky”** microWakeWord path is
+  installed and verified by a successful spoken test on the physical board.
 - Natural utterance capture that stops after trailing silence.
 - Local speech-to-text with Whisper `small.en`, accelerated by an NVIDIA GPU
   when CUDA is available and backed by a CPU fallback.
@@ -32,7 +36,8 @@ speech
   ↓
 ESP32-S3 board ── USB serial today / Wi-Fi later ──> Franky runtime
   │                                                    │
-  ├─ WakeNet wake word                                 ├─ local Whisper speech-to-text
+  ├─ “Yo Franky” microWakeWord                         ├─ local Whisper speech-to-text
+  │  (WakeNet fallback)                                │
   ├─ voice activity detection                         ├─ conversation and safe commands
   ├─ microphones + speaker                            └─ control-board web app
   └─ animated status LEDs
@@ -51,8 +56,9 @@ With the Franky firmware already flashed and the board connected over USB:
 ```
 
 Open the loopback page, choose **Connect to Franky**, and select the Espressif
-USB serial device. Say **“Hi ESP”**, wait for the acknowledgement cue, then
-speak naturally. The recognized text appears in the Wake area and terminal.
+USB serial device. The Wake area shows the phrase actually armed by the board.
+On the current build, say **“Yo Franky”**, wait for the acknowledgement cue,
+then speak naturally. The recognized text appears in the Wake area and terminal.
 
 The first run downloads the Whisper `small.en` model to
 `%LOCALAPPDATA%\Franky\models`. Wake audio and transcripts remain in memory,
@@ -88,6 +94,7 @@ not an application credential. Setup and privacy details live in the
 | [`firmware/franky-device/`](firmware/franky-device/) | ESP32 firmware for microphones, wake detection, speaker cues, and LEDs |
 | [`services/Franky.Runtime/`](services/Franky.Runtime/) | Computer-hosted .NET runtime and local transcription service |
 | [`tools/franky-control-board/`](tools/franky-control-board/) | Local browser interface for developing and testing Franky |
+| [`tools/wake-word/`](tools/wake-word/) | Reproducible local training workspace for “Yo Franky” |
 | [`tests/Franky.Runtime.Tests/`](tests/Franky.Runtime.Tests/) | Runtime and safety-boundary checks |
 | [`docs/`](docs/) | Product, architecture, development, and decision documentation |
 
