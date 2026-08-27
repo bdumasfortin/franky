@@ -22,15 +22,12 @@ public sealed class NamedCommandTool(IProcessRunner processRunner) : IToolExecut
                 MaximumOutputCharacters: 4_096),
         };
 
-    public IReadOnlyList<object> OpenAiToolDefinitions { get; } =
+    public IReadOnlyList<ToolDefinition> ToolDefinitions { get; } =
     [
-        new Dictionary<string, object?>
-        {
-            ["type"] = "function",
-            ["name"] = ToolName,
-            ["description"] = "Runs one read-only command selected from a fixed application allowlist. It cannot run arbitrary shell text or arguments.",
-            ["strict"] = true,
-            ["parameters"] = new Dictionary<string, object?>
+        new(
+            ToolName,
+            "Runs one read-only command selected from a fixed application allowlist. It cannot run arbitrary shell text or arguments.",
+            new Dictionary<string, object?>
             {
                 ["type"] = "object",
                 ["properties"] = new Dictionary<string, object?>
@@ -38,14 +35,13 @@ public sealed class NamedCommandTool(IProcessRunner processRunner) : IToolExecut
                     ["command_name"] = new Dictionary<string, object?>
                     {
                         ["type"] = "string",
-                        ["description"] = "The exact allowlisted command to run.",
+                        ["description"] = "The exact allowlisted command to run. system.identity reports the operating-system account running Franky; runtime.dotnet_version reports the installed .NET SDK version.",
                         ["enum"] = Commands.Keys.Order(StringComparer.Ordinal).ToArray(),
                     },
                 },
                 ["required"] = new[] { "command_name" },
                 ["additionalProperties"] = false,
-            },
-        },
+            }),
     ];
 
     public async Task<ToolExecutionResult> ExecuteAsync(
@@ -54,7 +50,7 @@ public sealed class NamedCommandTool(IProcessRunner processRunner) : IToolExecut
     {
         if (!string.Equals(call.Name, ToolName, StringComparison.Ordinal))
         {
-            return Failure("unknown_tool", $"Tool '{call.Name}' is not available.");
+            return Failure("unknown_tool", $"Tool '{call.Name}' is not available.", call.Name);
         }
 
         string? commandName;
@@ -67,12 +63,15 @@ public sealed class NamedCommandTool(IProcessRunner processRunner) : IToolExecut
         }
         catch (JsonException)
         {
-            return Failure("invalid_arguments", "Tool arguments were not valid JSON.");
+            return Failure("invalid_arguments", "Tool arguments were not valid JSON.", ToolName);
         }
 
         if (string.IsNullOrWhiteSpace(commandName) || !Commands.TryGetValue(commandName, out var process))
         {
-            return Failure("command_not_allowed", "The requested command is not on the application allowlist.");
+            return Failure(
+                "command_not_allowed",
+                "The requested command is not on the application allowlist.",
+                commandName ?? ToolName);
         }
 
         var result = await processRunner.RunAsync(process, cancellationToken);
@@ -86,9 +85,13 @@ public sealed class NamedCommandTool(IProcessRunner processRunner) : IToolExecut
                 stdout = result.StandardOutput,
                 stderr = result.StandardError,
                 error = result.Error,
-            }));
+            }),
+            commandName);
     }
 
-    private static ToolExecutionResult Failure(string code, string message) =>
-        new(false, JsonSerializer.Serialize(new { success = false, error_code = code, error = message }));
+    private static ToolExecutionResult Failure(string code, string message, string actionName) =>
+        new(
+            false,
+            JsonSerializer.Serialize(new { success = false, error_code = code, error = message }),
+            actionName);
 }

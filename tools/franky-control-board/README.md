@@ -15,14 +15,39 @@ until speech ends, sends a bounded mono utterance to the computer, and local
 Whisper transcription appears in the Wake area and terminal. Manual raw-stereo
 recording remains available between wake detections.
 
+After a non-empty wake transcript, the same loopback service now sends the text
+through Franky's conversation provider. Model tool calls remain constrained to
+the fixed named-command allowlist, and the Wake area displays the transcript,
+structured action outcome, and Franky reply separately. The current proof
+commands report the operating-system account running Franky and the installed
+.NET SDK version.
+
 ## Run
 
 1. Flash `firmware/franky-device` to the board.
-2. Run `./serve.ps1` from this directory. This starts the .NET control-board service on loopback. The first run downloads the `small.en` Whisper model (roughly 466 MiB) to `%LOCALAPPDATA%\Franky\models`.
-3. In the Chromium-based page that opens, choose **Connect to Franky** and select the Espressif USB serial device.
-4. Say the phrase shown in the Wake area—**“Yo Franky”** on the current custom
+2. Install Ollama and run `ollama pull qwen3.5:4b` once. See the
+   [local provider guide](../../docs/development/local-ollama.md).
+3. Run `./serve.ps1` from this directory. It selects local Ollama by default and
+   starts the .NET control-board service on loopback. The first run downloads
+   the `small.en` Whisper model (roughly 466 MiB) to `%LOCALAPPDATA%\Franky\models`.
+4. In the Chromium-based page that opens, choose **Connect to Franky** and select the Espressif USB serial device.
+5. Say the phrase shown in the Wake area—**“Yo Franky”** on the current custom
    build—wait for the acknowledgement, and speak naturally. Franky stops after
-   trailing silence and shows the local transcript. Use the Audio area for
-   manual recordings.
+   trailing silence, shows the local transcript, and processes it as an
+   assistant turn. Try “What version of .NET are you running?” or “Which user
+   account are you running as?” Use the Audio area for manual recordings.
 
-Manual clips remain in browser memory unless downloaded. Wake clips are discarded after transcription, transcript text is not persisted, and the page does not send speech outside the computer. The one-time model download is the only external request in the local speech path.
+Manual clips remain in browser memory unless downloaded. Wake clips are
+discarded after transcription and transcript text is not persisted. Audio stays
+local. The default Ollama conversation also stays on this computer. When the
+optional OpenAI provider is enabled, transcript text and conversation responses
+cross the cloud boundary described in the
+[OpenAI development notes](../../docs/development/openai-api.md).
+
+Switch modes explicitly when needed:
+
+```powershell
+.\serve.ps1 -AssistantProvider demo
+$env:OPENAI_API_KEY = "your-api-key"
+.\serve.ps1 -AssistantProvider openai
+```

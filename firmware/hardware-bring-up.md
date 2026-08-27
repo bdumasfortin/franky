@@ -2,7 +2,7 @@
 
 Status: **USB development path verified; network and auxiliary hardware remain open**
 
-Observed on: **2026-08-26**
+Observed on: **2026-08-26 and 2026-08-27**
 
 ## Physical sample
 
@@ -35,6 +35,13 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
   detection worked very nicely through the existing cue, capture, and control-board flow.
 - After wake detection, the ESP-SR Audio Front End captured speech until trailing silence and delivered bounded mono audio for local Whisper transcription.
 - Connection, disconnection, and wake acknowledgement cues were heard through the ES8311 speaker path.
+- On 2026-08-27 all cues became silent even though wake detection and the
+  codec write path still completed without errors. Schematic inspection showed
+  that the separate NS4150B amplifier is enabled by `PA_CTRL` on TCA9555
+  expander pin 8, which the custom firmware had not initialized. The firmware
+  now drives that pin high on every boot. The revised image built, flashed, and
+  booted successfully, and the user manually confirmed both the rising
+  connection cue and falling disconnection cue were audible again.
 
 These observations verify the USB data path, MCU identification, memory capacities, factory-firmware boot, stereo microphone capture, local wake detection, voice-activity endpointing, state LEDs, speaker cues, and the complete wake-to-transcript development path. They do not verify the planned Wi-Fi transport or full spoken-response playback.
 

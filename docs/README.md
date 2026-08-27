@@ -22,6 +22,8 @@ the authoritative history for consequential choices.
 - [Wake-word training](../tools/wake-word/README.md) — generate the local “Yo
   Franky” model used by custom firmware builds.
 - [Computer runtime](../services/README.md) — understand the .NET host boundary.
+- [Local Ollama development](development/local-ollama.md) — install and run the
+  default local conversation provider or switch providers.
 - [OpenAI API development](development/openai-api.md) — configure the optional
   cloud conversation provider and understand its privacy boundary.
 

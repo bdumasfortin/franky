@@ -19,8 +19,8 @@ generation.
 ### Computer runtime
 
 - .NET 10 modular-monolith scaffold with explicit internal boundaries.
-- Deterministic local conversation provider and optional OpenAI Responses API provider.
-- In-memory conversation continuation.
+- Deterministic demo, local Ollama, and optional OpenAI Responses API conversation providers.
+- Provider-specific in-memory conversation continuation behind one interface.
 - Strictly allowlisted read-only command execution.
 - Automated checks for command validation, conversation continuation, and tool results.
 
@@ -38,22 +38,35 @@ generation.
 - Voice-activity endpointing and bounded mono wake capture verified.
 - Local Whisper `small.en` transcription working with NVIDIA GPU acceleration and CPU fallback.
 - State-driven browser control board working over USB serial.
+- Loopback assistant-turn endpoint connects wake transcripts to the existing
+  conversation session and named-command tool loop.
+- Structured action outcomes and Franky replies render separately in the
+  control board; demo mode is explicitly labeled as unable to select tools.
+- Assistant bridge, session continuity, busy-turn rejection, and tool-call
+  reporting are locally covered for the OpenAI and Ollama request shapes.
+- Live `qwen3.5:4b` selected and executed both read-only diagnostics through the
+  loopback endpoint. Background model preloading avoids the observed cold-load
+  penalty; the physical spoken path remains unverified.
 
 ## Active vertical slice
 
-Connect the wake transcript to the existing conversation and safe-command path:
+Prove the implemented bridge with a live model-selected spoken command, then add
+the first requested board capability:
 
-1. Treat one completed transcript as a user request.
-2. Show the transition through listening, processing, success, and error states.
-3. Return a text response to the control board.
-4. Preserve the allowlisted command boundary and truthful failure behavior.
+1. Run both read-only diagnostic requests through the physical wake path and
+   record observed latency while Whisper and Ollama share the GPU.
+2. Choose or create one short SFX asset and a clear spoken request for it.
+3. Add a named firmware command that plays only that embedded asset and returns
+   an explicit completion or failure acknowledgement.
+4. Bridge the browser-owned serial action into the assistant tool continuation;
+   do not let the model claim playback succeeded before the board acknowledges it.
 5. Keep wake audio and transcripts ephemeral unless persistence is explicitly designed later.
 
 ## Following increments
 
 1. Add text-to-speech behind a replaceable provider boundary.
 2. Stream or send the generated response to the board speaker.
-3. Extend the draft protocol for wake-triggered utterances.
+3. Extend the draft protocol for wake-triggered utterances and named playback.
 4. Implement authenticated Wi-Fi/WebSocket transport and reconnect behavior.
 5. Tune the custom “Yo Franky” model with real-room positives or hard negatives
    only if ordinary use exposes misses or false activations.

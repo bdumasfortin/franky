@@ -1,6 +1,6 @@
 # ADR-0005: Use the OpenAI API behind a replaceable conversation provider
 
-- Status: Accepted with external-access prerequisite
+- Status: Superseded as the current provider by ADR-0009; retained as the optional OpenAI adapter decision
 - Date: 2026-08-18
 - Deciders: Project owner, engineering recommendation
 
@@ -41,7 +41,6 @@ The official API quickstart requires an API key and directs developers to API bi
 
 ## References
 
-- [OpenAI API developer quickstart](https://platform.openai.com/docs/quickstart/make-your-first-api-request)
+- [OpenAI API developer quickstart](https://developers.openai.com/api/docs/quickstart)
 - [OpenAI API authentication](https://developers.openai.com/api/reference/overview#authentication)
 - [OpenAI API data controls](https://platform.openai.com/docs/models/default-usage-policies-by-endpoint)
-

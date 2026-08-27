@@ -13,7 +13,9 @@ The board's USB, factory-boot, microphone, speaker, LED, wake-word, and voice-ac
   model artifact is present, with **“Hi ESP”** WakeNet9 as the clean-build and
   initialization fallback;
 - uses the ESP-SR Audio Front End to stop wake capture after trailing silence;
-- plays connection, disconnection, and wake acknowledgement cues; and
+- explicitly enables the NS4150B speaker amplifier through TCA9555 expander
+  pin 8 on every boot, then plays connection, disconnection, and wake
+  acknowledgement cues; and
 - renders system state through the seven-pixel RGB ring, including a
   high-refresh, dithered offline breathing animation for smooth low-light fades.
 

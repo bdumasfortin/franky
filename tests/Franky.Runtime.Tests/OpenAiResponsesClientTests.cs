@@ -35,6 +35,7 @@ internal static class OpenAiResponsesClientTests
         var reply = await client.SendAsync(session, "Hello", CancellationToken.None);
 
         TestAssert.Equal("Hello there.", reply.Text);
+        TestAssert.Equal(0, reply.Actions.Count);
         TestAssert.Equal("resp_1", session.PreviousResponseId);
         TestAssert.Equal("Bearer", handler.Requests[0].Headers.Authorization?.Scheme);
         TestAssert.Equal("test-key", handler.Requests[0].Headers.Authorization?.Parameter);
@@ -51,7 +52,7 @@ internal static class OpenAiResponsesClientTests
                   "type": "function_call",
                   "call_id": "call_1",
                   "name": "run_named_command",
-                  "arguments": "{\"command\":\"runtime.dotnet_version\"}"
+                  "arguments": "{\"command_name\":\"runtime.dotnet_version\"}"
                 }
               ]
             }
@@ -81,6 +82,9 @@ internal static class OpenAiResponsesClientTests
         TestAssert.Equal("The runtime is available.", reply.Text);
         TestAssert.Equal("resp_final", session.PreviousResponseId);
         TestAssert.Equal(1, toolExecutor.CallCount);
+        TestAssert.Equal(1, reply.Actions.Count);
+        TestAssert.Equal("runtime.dotnet_version", reply.Actions[0].Name);
+        TestAssert.True(reply.Actions[0].Success);
         TestAssert.Equal(2, handler.Requests.Count);
 
         var followUpJson = await handler.Requests[1].Content!.ReadAsStringAsync();
@@ -136,18 +140,21 @@ internal static class OpenAiResponsesClientTests
     {
         public int CallCount { get; private set; }
 
-        public IReadOnlyList<object> OpenAiToolDefinitions { get; } = [];
+        public IReadOnlyList<ToolDefinition> ToolDefinitions { get; } = [];
 
         public Task<ToolExecutionResult> ExecuteAsync(ToolCall call, CancellationToken cancellationToken)
         {
             CallCount++;
-            return Task.FromResult(new ToolExecutionResult(true, "{\"stdout\":\"10.0.301\"}"));
+            return Task.FromResult(new ToolExecutionResult(
+                true,
+                "{\"stdout\":\"10.0.301\"}",
+                "runtime.dotnet_version"));
         }
     }
 
     private sealed class RejectingToolExecutor : IToolExecutor
     {
-        public IReadOnlyList<object> OpenAiToolDefinitions { get; } = [];
+        public IReadOnlyList<ToolDefinition> ToolDefinitions { get; } = [];
 
         public Task<ToolExecutionResult> ExecuteAsync(ToolCall call, CancellationToken cancellationToken) =>
             throw new InvalidOperationException("No tool call was expected in this test.");
@@ -162,7 +169,6 @@ internal static class OpenAiResponsesClientTests
 
     private static AssistantOptions TestOptions() =>
         new(
-            UseDemoProvider: false,
             OpenAiApiKey: "test-key",
             OpenAiModel: "gpt-test",
             OpenAiBaseUri: new Uri("https://api.openai.com/"),

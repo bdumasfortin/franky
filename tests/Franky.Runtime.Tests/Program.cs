@@ -2,10 +2,16 @@ using Franky.Runtime.Tests;
 
 var tests = new (string Name, Func<Task> Run)[]
 {
+    (nameof(AssistantOptionsTests.SelectsOllamaWithoutOpenAiKey), AssistantOptionsTests.SelectsOllamaWithoutOpenAiKey),
+    (nameof(AssistantOptionsTests.DefaultsToDemoWithoutProviderOrKey), AssistantOptionsTests.DefaultsToDemoWithoutProviderOrKey),
     (nameof(NamedCommandToolTests.RejectsCommandOutsideAllowlist), NamedCommandToolTests.RejectsCommandOutsideAllowlist),
     (nameof(NamedCommandToolTests.MapsAllowedNameToFixedProcess), NamedCommandToolTests.MapsAllowedNameToFixedProcess),
+    (nameof(AssistantTurnCoordinatorTests.PreservesOneConversationSession), AssistantTurnCoordinatorTests.PreservesOneConversationSession),
+    (nameof(AssistantTurnCoordinatorTests.RejectsOverlappingTurns), AssistantTurnCoordinatorTests.RejectsOverlappingTurns),
     (nameof(OpenAiResponsesClientTests.ReturnsTextAndStoresContinuationId), OpenAiResponsesClientTests.ReturnsTextAndStoresContinuationId),
     (nameof(OpenAiResponsesClientTests.ExecutesToolAndReturnsToolOutputToModel), OpenAiResponsesClientTests.ExecutesToolAndReturnsToolOutputToModel),
+    (nameof(OllamaConversationClientTests.PreservesConversationLocally), OllamaConversationClientTests.PreservesConversationLocally),
+    (nameof(OllamaConversationClientTests.ExecutesToolAndReturnsToolOutputToModel), OllamaConversationClientTests.ExecutesToolAndReturnsToolOutputToModel),
     (nameof(PcmWaveValidatorTests.AcceptsFrankyMonoPcm), PcmWaveValidatorTests.AcceptsFrankyMonoPcm),
     (nameof(PcmWaveValidatorTests.RejectsStereoWakeAudio), PcmWaveValidatorTests.RejectsStereoWakeAudio),
 };

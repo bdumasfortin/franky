@@ -20,7 +20,7 @@ public sealed class OpenAiResponsesClient(
     };
 
     private const string Instructions = """
-        You are a concise, warm, slightly playful personal assistant. Your permanent name has not been selected, so do not invent one.
+        You are Franky, a concise, warm, slightly playful personal voice assistant.
         Only claim that a computer action succeeded after a tool result reports success.
         Use run_named_command only when the user explicitly asks for one of its documented read-only actions.
         Never suggest that you have arbitrary shell access. If a requested action is unavailable, say so plainly.
@@ -38,6 +38,7 @@ public sealed class OpenAiResponsesClient(
         object input = userText;
         var previousResponseId = session.PreviousResponseId;
         var totalToolCalls = 0;
+        var actions = new List<AssistantActionOutcome>();
 
         for (var round = 0; round <= options.MaxToolRounds; round++)
         {
@@ -46,7 +47,7 @@ public sealed class OpenAiResponsesClient(
                 ["model"] = options.OpenAiModel,
                 ["instructions"] = Instructions,
                 ["input"] = input,
-                ["tools"] = toolExecutor.OpenAiToolDefinitions,
+                ["tools"] = toolExecutor.ToolDefinitions.Select(ToOpenAiToolDefinition).ToArray(),
                 ["tool_choice"] = "auto",
                 ["store"] = true,
             };
@@ -89,7 +90,7 @@ public sealed class OpenAiResponsesClient(
                     throw new InvalidOperationException("OpenAI returned neither text nor a supported tool call.");
                 }
 
-                return new AssistantReply(parsed.OutputText, totalToolCalls);
+                return new AssistantReply(parsed.OutputText, totalToolCalls, actions);
             }
 
             if (round == options.MaxToolRounds)
@@ -104,6 +105,9 @@ public sealed class OpenAiResponsesClient(
                     new ToolCall(toolCall.Name, toolCall.ArgumentsJson),
                     cancellationToken);
                 totalToolCalls++;
+                actions.Add(new AssistantActionOutcome(
+                    result.ActionName ?? toolCall.Name,
+                    result.Success));
                 toolOutputs.Add(new Dictionary<string, object?>
                 {
                     ["type"] = "function_call_output",
@@ -118,6 +122,16 @@ public sealed class OpenAiResponsesClient(
 
         throw new UnreachableException();
     }
+
+    private static object ToOpenAiToolDefinition(ToolDefinition tool) =>
+        new Dictionary<string, object?>
+        {
+            ["type"] = "function",
+            ["name"] = tool.Name,
+            ["description"] = tool.Description,
+            ["strict"] = tool.Strict,
+            ["parameters"] = tool.Parameters,
+        };
 
     private static string RedactError(string responseBody)
     {

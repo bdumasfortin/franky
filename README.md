@@ -12,7 +12,13 @@ recognition and will grow into conversation and home-control features.
 > phrase to a local transcript. A custom **“Yo Franky”** model is now trained,
 > flashed, and successfully recognized in its first physical-room test. Longer
 > use will reveal whether its sensitivity needs tuning.
-> Wi-Fi transport, command interpretation, and spoken answers remain ahead.
+> The control board now hands completed transcripts to Franky's conversation
+> and allowlisted-command path. Ollama with `qwen3.5:4b` is the selected local
+> provider, while OpenAI remains an optional cloud adapter. The HTTP bridge and
+> both provider tool loops are locally tested, and live Ollama selected both
+> read-only diagnostics correctly through the loopback endpoint. The full
+> physical spoken-command path still needs observation. Wi-Fi transport and
+> spoken answers remain ahead.
 
 ## What works today
 
@@ -26,8 +32,10 @@ recognition and will grow into conversation and home-control features.
 - Speaker cues for connection, disconnection, and wake acknowledgement.
 - A seven-pixel status ring with state colors and an offline breathing animation.
 - A local browser control board for audio, LED, wake-word, and device testing.
-- A .NET conversation pipeline with a deterministic demo provider, an optional
-  OpenAI provider, and strictly allowlisted read-only commands.
+- A .NET conversation pipeline with local Ollama, deterministic demo, optional
+  OpenAI providers, and strictly allowlisted read-only commands.
+- A loopback assistant-turn endpoint that connects wake transcripts to that
+  conversation path and reports model-selected actions separately from replies.
 
 ## How it fits together
 
@@ -59,10 +67,17 @@ Open the loopback page, choose **Connect to Franky**, and select the Espressif
 USB serial device. The Wake area shows the phrase actually armed by the board.
 On the current build, say **“Yo Franky”**, wait for the acknowledgement cue,
 then speak naturally. The recognized text appears in the Wake area and terminal.
+The launcher uses local Ollama with `qwen3.5:4b` by default, so that transcript
+continues through Franky's conversation provider and may invoke one of the two
+fixed read-only diagnostics without a cloud key. Use `-AssistantProvider demo`
+for the deterministic **Demo · no tools** mode or `-AssistantProvider openai`
+after configuring a separate OpenAI Platform key.
 
 The first run downloads the Whisper `small.en` model to
-`%LOCALAPPDATA%\Franky\models`. Wake audio and transcripts remain in memory,
-stay on the computer, and are not persisted.
+`%LOCALAPPDATA%\Franky\models`. Wake audio remains local and is discarded after
+transcription. In the default Ollama mode, transcript text and conversation
+history stay in memory on this computer and are not persisted by Franky. When a
+cloud provider is selected, transcript text crosses that provider boundary.
 
 See the [control-board guide](tools/franky-control-board/README.md) for the full
 testing flow and [firmware guide](firmware/README.md) for board setup.
@@ -79,9 +94,11 @@ dotnet run --project tests/Franky.Runtime.Tests --configuration Release
 Run a local text conversation without API credentials:
 
 ```powershell
-dotnet run --project services/Franky.Runtime -- --demo
+$env:FRANKY_ASSISTANT_PROVIDER = "ollama"
+dotnet run --project services/Franky.Runtime
 ```
 
+Install and model setup are in the [local Ollama guide](docs/development/local-ollama.md).
 The optional OpenAI conversation provider requires a separately created
 `OPENAI_API_KEY` and API-platform billing or credits. A ChatGPT subscription is
 not an application credential. Setup and privacy details live in the
@@ -105,6 +122,7 @@ direction and the distinction between working features and planned ones.
 
 - Do not commit API keys, Wi-Fi credentials, access tokens, recordings, or transcripts.
 - Local wake-word transcription does not send speech outside the computer.
+- Local Ollama conversation keeps transcript text and replies on the computer.
 - OpenAI-backed conversation is a separate, explicit cloud boundary.
 - Model-requested actions are mapped to fixed, allowlisted commands; arbitrary
   model-generated shell commands are rejected.

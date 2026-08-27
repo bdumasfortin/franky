@@ -20,7 +20,7 @@ public sealed class ConsoleApplication(
         await output.WriteLineAsync($"Provider: {conversationClient.ProviderName}");
         if (options.UseDemoProvider)
         {
-            await output.WriteLineAsync("OPENAI_API_KEY is not configured or --demo was supplied; responses are local and deterministic.");
+            await output.WriteLineAsync("No assistant provider is configured or --demo was supplied; responses are local and deterministic.");
         }
 
         await output.WriteLineAsync("Commands: /help, /reset, /run system.identity, /run runtime.dotnet_version, /exit");

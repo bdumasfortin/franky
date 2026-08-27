@@ -2,9 +2,9 @@
 
 ## Current state
 
-The .NET 10 runtime supports deterministic local conversation, an optional
-OpenAI provider, two allowlisted read-only commands, and local Whisper
-transcription. The custom Franky firmware is running on the physical board.
+The .NET 10 runtime supports local Ollama conversation, deterministic demo and
+optional OpenAI providers, two allowlisted read-only commands, and local
+Whisper transcription. The custom Franky firmware is running on the physical board.
 Stereo capture, WakeNet “Hi ESP” detection, voice-activity endpointing, speaker
 cues, and animated status LEDs have all been observed through the USB
 development control board. A locally trained “Yo Franky” microWakeWord image is
@@ -12,7 +12,15 @@ also flashed, has booted stably, and has passed its first physical spoken test.
 Longer-term sensitivity and false-activation behavior should be tuned from
 ordinary use rather than synthetic metrics alone.
 
-The active gap is no longer basic hardware bring-up. The next vertical slice is to feed a wake transcript into the conversation and safe-command pipeline, produce a response, and then return spoken audio. Wi-Fi/WebSocket transport remains the intended room deployment but is not implemented yet.
+The active gap is no longer basic hardware bring-up or transcript routing. The
+control-board service now feeds each completed wake transcript into the existing
+conversation and safe-command pipeline and returns separate action and reply
+results. This bridge and both real-provider request shapes are locally tested.
+Live Ollama selected and executed both read-only diagnostics through the
+loopback endpoint. The physical wake-to-command path remains unverified. The
+first requested device capability is named SFX playback,
+followed by spoken responses. Wi-Fi/WebSocket transport remains the intended
+room deployment but is not implemented yet.
 
 ## Secrets
 
@@ -37,13 +45,27 @@ Supply local values through process environment variables. Do not place a real A
 
 ## Development paths
 
-- Use `--demo` to exercise conversation and safe command execution without API credentials or the board.
-- Use the Franky control board to exercise the physical microphones, speaker, LEDs, wake engine, and local transcription over USB.
+- Use `--demo` to exercise conversation flow without API credentials or the board;
+  demo mode does not select or execute tools.
+- Use `FRANKY_ASSISTANT_PROVIDER=ollama` for the local tool-capable provider;
+  the control-board launcher selects it by default.
+- Use the Franky control board to exercise the physical microphones, speaker,
+  LEDs, wake engine, local transcription, and model-selected named-command path
+  over USB. Select `openai` explicitly only when its separate API key is configured.
 - Use `tools/wake-word` to reproduce the ignored local “Yo Franky” model; never
   commit its datasets, recordings, checkpoints, or exported `.tflite` file.
 - Keep Wi-Fi transport changes behind the documented device boundary so the working speech and command paths do not need to be redesigned.
 
 See the [hardware bring-up record](../../firmware/hardware-bring-up.md) for observed evidence and remaining hardware gaps.
+
+## Local Ollama evidence
+
+On the current RTX 3070 Ti development computer, an explicit cold model request
+took about 65 seconds. Background startup preloading reduced model preparation
+to about 4.9 seconds; subsequent two-round tool requests completed in roughly
+0.9–1.7 seconds. Both `runtime.dotnet_version` and `system.identity` were
+selected by the live `qwen3.5:4b` model and returned truthful tool outcomes.
+These are loopback service observations, not yet physical spoken-path results.
 
 ## Validation
 

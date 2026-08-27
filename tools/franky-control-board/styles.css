@@ -369,13 +369,15 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .wake-phrase { color: #d9e3e2; font: 700 1.02rem/1.2 var(--mono); }
 .wake-card p { margin: 6px 0 0; color: #687985; font: 0.56rem/1.5 var(--mono); }
 .wake-monitor-detected .wake-card { border-color: var(--core); box-shadow: inset 0 0 30px var(--core-faint); }
-.wake-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+.wake-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
 .wake-stats div { border: 1px solid #27343e; padding: 11px; color: #72828c; font: 0.54rem/1.3 var(--mono); text-transform: uppercase; }
 .wake-stats strong { display: block; margin-top: 5px; color: #cad5d6; font-size: 0.7rem; text-transform: none; }
 .transcript-card { margin-top: 10px; border: 1px solid #27343e; padding: 12px; background: #060a0d; }
 .transcript-card > span { color: #62727d; font: 0.52rem/1 var(--mono); letter-spacing: 0.07em; text-transform: uppercase; }
 .transcript-card p { margin: 9px 0 8px; color: #e2eae9; font: 650 0.78rem/1.5 var(--mono); }
 .transcript-card small { color: #64747e; font: 0.53rem/1.4 var(--mono); }
+.assistant-card { border-color: #2d3746; background: #090a11; }
+.assistant-card > span { color: #8f6db3; }
 .device-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .device-grid span { display: block; color: #62727d; font: 0.51rem/1 var(--mono); text-transform: uppercase; }
 .device-grid strong { display: block; margin-top: 6px; color: #c4cece; font: 650 0.64rem/1.25 var(--mono); }
@@ -424,6 +426,10 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .log-line.state-line .log-kind, .state-keyword { color: var(--log-state-color); font-weight: 600; }
 .log-line.transcript-line .log-kind { color: #74e996; }
 .log-line.transcript-line .log-message { color: #e3ecea; font-weight: 600; }
+.log-line.intent-line .log-kind { color: #b879ff; }
+.log-line.action-line .log-kind { color: #74e996; }
+.log-line.assistant-line .log-kind { color: #43e5dd; }
+.log-line.assistant-line .log-message { color: #e3ecea; font-weight: 600; }
 .log-line.error-line .log-kind, .log-line.error-line .log-message { color: #e1878b; }
 .terminal-paused { box-shadow: inset 0 0 0 1px #715e3e; }
 
@@ -448,6 +454,7 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
   .compact-fields { grid-template-columns: 1fr; }
   .action-row { flex-wrap: wrap; }
   .action-status { width: 100%; margin-left: 0; text-align: left; }
+  .wake-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .led-grid { grid-template-columns: 1fr 1fr; }
   .device-grid { grid-template-columns: 1fr; }
   .terminal-module { min-height: 520px; }

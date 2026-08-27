@@ -23,6 +23,12 @@
 #define AUDIO_I2S_DIN GPIO_NUM_15
 #define AUDIO_I2S_DOUT GPIO_NUM_16
 
+#define IO_EXPANDER_ADDRESS 0x20
+#define IO_EXPANDER_OUTPUT_PORT_1_REGISTER 0x03
+#define IO_EXPANDER_CONFIG_PORT_1_REGISTER 0x07
+#define IO_EXPANDER_PA_CTRL_MASK (1U << 0)
+#define IO_EXPANDER_I2C_TIMEOUT_MS 1000
+
 #define READ_CHUNK_FRAMES 256
 #define PLAY_CHUNK_FRAMES 256
 #define DEFAULT_INPUT_GAIN_DB 30.0f
@@ -33,6 +39,7 @@
 static i2s_chan_handle_t s_tx_handle;
 static i2s_chan_handle_t s_rx_handle;
 static i2c_master_bus_handle_t s_i2c_bus;
+static i2c_master_dev_handle_t s_io_expander;
 static const audio_codec_data_if_t *s_audio_data_interface;
 static esp_codec_dev_handle_t s_record_device;
 static esp_codec_dev_handle_t s_play_device;
@@ -50,6 +57,67 @@ static esp_err_t init_i2c(void)
     };
 
     return i2c_new_master_bus(&config, &s_i2c_bus);
+}
+
+static esp_err_t read_io_expander_register(uint8_t register_address, uint8_t *value)
+{
+    return i2c_master_transmit_receive(
+        s_io_expander,
+        &register_address,
+        sizeof(register_address),
+        value,
+        sizeof(*value),
+        IO_EXPANDER_I2C_TIMEOUT_MS);
+}
+
+static esp_err_t write_io_expander_register(uint8_t register_address, uint8_t value)
+{
+    const uint8_t command[] = {register_address, value};
+    return i2c_master_transmit(
+        s_io_expander,
+        command,
+        sizeof(command),
+        IO_EXPANDER_I2C_TIMEOUT_MS);
+}
+
+static esp_err_t enable_speaker_amplifier(void)
+{
+    const i2c_device_config_t device_config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = IO_EXPANDER_ADDRESS,
+        .scl_speed_hz = 400000,
+    };
+    esp_err_t error = i2c_master_bus_add_device(
+        s_i2c_bus,
+        &device_config,
+        &s_io_expander);
+    if (error != ESP_OK) return error;
+
+    // PA_CTRL is TCA9555 P10 (board signal Extend_IO8), not a native ESP32
+    // GPIO. Drive its output latch high before changing the pin direction so
+    // a cold boot cannot leave the NS4150B amplifier disabled by its pulldown.
+    uint8_t output_port_1 = 0;
+    error = read_io_expander_register(
+        IO_EXPANDER_OUTPUT_PORT_1_REGISTER,
+        &output_port_1);
+    if (error != ESP_OK) return error;
+
+    output_port_1 |= IO_EXPANDER_PA_CTRL_MASK;
+    error = write_io_expander_register(
+        IO_EXPANDER_OUTPUT_PORT_1_REGISTER,
+        output_port_1);
+    if (error != ESP_OK) return error;
+
+    uint8_t config_port_1 = 0;
+    error = read_io_expander_register(
+        IO_EXPANDER_CONFIG_PORT_1_REGISTER,
+        &config_port_1);
+    if (error != ESP_OK) return error;
+
+    config_port_1 &= (uint8_t)~IO_EXPANDER_PA_CTRL_MASK;
+    return write_io_expander_register(
+        IO_EXPANDER_CONFIG_PORT_1_REGISTER,
+        config_port_1);
 }
 
 static esp_err_t init_i2s(void)
@@ -188,6 +256,11 @@ static esp_err_t init_output_codec(void)
         esp_codec_dev_set_out_vol(s_play_device, DEFAULT_OUTPUT_VOLUME) != ESP_CODEC_DEV_OK ||
         esp_codec_dev_set_out_mute(s_play_device, true) != ESP_CODEC_DEV_OK) {
         return ESP_FAIL;
+    }
+
+    esp_err_t error = enable_speaker_amplifier();
+    if (error != ESP_OK) {
+        return error;
     }
 
     s_playback_mutex = xSemaphoreCreateMutex();

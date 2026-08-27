@@ -115,11 +115,17 @@
                 <div>Session detections<strong id="wakeCount">0</strong></div>
                 <div>Last heard<strong id="lastWake">Never</strong></div>
                 <div>Transcriber<strong id="sttStatus">Preparing</strong></div>
+                <div>Assistant<strong id="assistantStatus">Checking</strong></div>
               </div>
               <div class="transcript-card">
                 <span>Last transcript</span>
                 <p id="lastTranscript">Connect to Franky, say the wake phrase, then speak naturally.</p>
                 <small id="transcriptMeta">Local Whisper · transcripts are not saved</small>
+              </div>
+              <div class="transcript-card assistant-card">
+                <span>Franky reply</span>
+                <p id="lastReply">No request processed in this session.</p>
+                <small id="assistantMeta">Named capabilities · fixed allowlist</small>
               </div>
               <div class="feature-note"><strong id="wakeCaptureMode">Natural endpointing enabled</strong><span>Franky stops listening after trailing silence, with a 20-second safety cap.</span></div>
             </div>

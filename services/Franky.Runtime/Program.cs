@@ -13,21 +13,7 @@ if (args.Contains("--control-board", StringComparer.OrdinalIgnoreCase))
 var options = AssistantOptions.FromEnvironment(args);
 var events = new JsonEventSink(Console.Error);
 var commandTool = new NamedCommandTool(new ProcessCommandRunner());
-
-IConversationClient conversationClient;
-if (options.UseDemoProvider)
-{
-    conversationClient = new DemoConversationClient();
-}
-else
-{
-    var httpClient = new HttpClient
-    {
-        BaseAddress = options.OpenAiBaseUri,
-        Timeout = TimeSpan.FromSeconds(90),
-    };
-    conversationClient = new OpenAiResponsesClient(httpClient, options, commandTool, events);
-}
+var conversationClient = ConversationClientFactory.Create(options, commandTool, events);
 
 var application = new ConsoleApplication(
     conversationClient,

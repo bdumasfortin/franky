@@ -42,13 +42,21 @@ Use one .NET 10 computer application with explicit internal boundaries for devic
 
 The first speech-to-text provider runs Whisper locally through Whisper.net.
 During the USB development phase, the same .NET process serves the Franky
-control board and its loopback-only transcription endpoint. The ESP32 retains
+control board, its loopback-only transcription endpoint, and an assistant-turn
+endpoint that reuses the existing conversation session and allowlisted tool
+executor. Local Ollama with `qwen3.5:4b` is the current conversation provider;
+it keeps message history in memory. The OpenAI Responses adapter remains
+selectable for later cloud use. Provider-neutral tool definitions are mapped to
+each API without changing the fixed executor. Action outcomes return to the UI
+separately from assistant text. The ESP32 retains
 its ESP-SR Audio Front End for microphone processing and trailing-silence
 endpointing, and runs the custom “Yo Franky” streaming model through TensorFlow
 Lite Micro. [ADR-0007](../adr/0007-use-local-whisper-for-speech-to-text.md)
 records the transcription choice and
 [ADR-0008](../adr/0008-use-custom-microwakeword-model-for-yo-franky.md)
 records the wake-model choice.
+[ADR-0009](../adr/0009-use-local-ollama-for-current-conversation-provider.md)
+records the local conversation-provider choice.
 
 ## Target Wi-Fi communication shape
 

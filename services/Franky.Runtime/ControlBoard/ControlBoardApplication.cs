@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using Franky.Runtime.Configuration;
+using Franky.Runtime.Conversation;
 using Franky.Runtime.Diagnostics;
 using Franky.Runtime.Speech;
+using Franky.Runtime.Tools;
 using Microsoft.Extensions.FileProviders;
 
 namespace Franky.Runtime.ControlBoard;
@@ -8,6 +11,7 @@ namespace Franky.Runtime.ControlBoard;
 public static class ControlBoardApplication
 {
     private const int MaxAudioBytes = 2 * 1024 * 1024;
+    private const int MaxTranscriptCharacters = 4_000;
 
     public static async Task<int> RunAsync(
         string[] arguments,
@@ -25,7 +29,15 @@ public static class ControlBoardApplication
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
-        builder.Services.AddSingleton<IEventSink>(_ => new JsonEventSink(Console.Error));
+        var options = AssistantOptions.FromEnvironment(arguments);
+        var events = new JsonEventSink(Console.Error);
+        var commandTool = new NamedCommandTool(new ProcessCommandRunner());
+        var conversationClient = ConversationClientFactory.Create(options, commandTool, events);
+        builder.Services.AddSingleton(options);
+        builder.Services.AddSingleton<IEventSink>(events);
+        builder.Services.AddSingleton<IToolExecutor>(commandTool);
+        builder.Services.AddSingleton(conversationClient);
+        builder.Services.AddSingleton<AssistantTurnCoordinator>();
         builder.Services.AddSingleton<ISpeechTranscriber, WhisperNetSpeechTranscriber>();
 
         var app = builder.Build();
@@ -35,6 +47,65 @@ public static class ControlBoardApplication
 
         app.MapGet("/api/transcriptions/status", (ISpeechTranscriber transcriber) =>
             Results.Ok(transcriber.Status));
+
+        app.MapGet("/api/assistant/status", (
+            AssistantTurnCoordinator coordinator,
+            AssistantOptions assistantOptions) =>
+            Results.Ok(new
+            {
+                provider = coordinator.ProviderName,
+                toolSelectionEnabled = assistantOptions.Provider != AssistantProvider.Demo,
+                local = assistantOptions.IsLocal,
+            }));
+
+        app.MapPost("/api/assistant/turns", async (
+            AssistantTurnRequest request,
+            AssistantTurnCoordinator coordinator,
+            IEventSink events,
+            CancellationToken requestCancellation) =>
+        {
+            var text = request.Text?.Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                return Results.Problem(
+                    "Franky expects a non-empty transcript.",
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
+            if (text.Length > MaxTranscriptCharacters)
+            {
+                return Results.Problem(
+                    "The transcript is too large.",
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
+            try
+            {
+                var reply = await coordinator.SendAsync(text, requestCancellation);
+                return Results.Ok(new
+                {
+                    reply.Text,
+                    reply.ToolCallsExecuted,
+                    reply.Actions,
+                    provider = coordinator.ProviderName,
+                });
+            }
+            catch (AssistantTurnBusyException exception)
+            {
+                return Results.Problem(
+                    exception.Message,
+                    statusCode: StatusCodes.Status409Conflict);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                events.Write("assistant.turn_failed", new Dictionary<string, object?>
+                {
+                    ["error_type"] = exception.GetType().Name,
+                });
+                return Results.Problem(
+                    "Franky could not complete that request. Check the runtime output.",
+                    statusCode: StatusCodes.Status502BadGateway);
+            }
+        });
 
         app.MapPost("/api/transcriptions", async (
             HttpRequest request,
@@ -123,6 +194,20 @@ public static class ControlBoardApplication
                     Console.Error.WriteLine($"Franky local speech model preparation failed: {exception.Message}");
                 }
             });
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await conversationClient.PrepareAsync(app.Lifetime.ApplicationStopping);
+                }
+                catch (OperationCanceledException) when (app.Lifetime.ApplicationStopping.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    Console.Error.WriteLine($"Franky conversation provider preparation failed: {exception.Message}");
+                }
+            });
         });
 
         Console.WriteLine($"Franky control board: http://127.0.0.1:{port}");
@@ -172,3 +257,5 @@ public static class ControlBoardApplication
             ? parsed
             : fallback;
 }
+
+public sealed record AssistantTurnRequest(string? Text);

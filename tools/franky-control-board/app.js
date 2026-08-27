@@ -27,8 +27,11 @@ const els = {
   wakeCount: document.querySelector('#wakeCount'),
   lastWake: document.querySelector('#lastWake'),
   sttStatus: document.querySelector('#sttStatus'),
+  assistantStatus: document.querySelector('#assistantStatus'),
   lastTranscript: document.querySelector('#lastTranscript'),
   transcriptMeta: document.querySelector('#transcriptMeta'),
+  lastReply: document.querySelector('#lastReply'),
+  assistantMeta: document.querySelector('#assistantMeta'),
   wakeCaptureMode: document.querySelector('#wakeCaptureMode'),
   deviceConnection: document.querySelector('#deviceConnection'),
   deviceAudioFormat: document.querySelector('#deviceAudioFormat'),
@@ -71,6 +74,7 @@ let heartbeatTimer;
 let wakePulseTimer;
 let transcriptStateTimer;
 let transcriptionStatusTimer;
+let assistantStatusTimer;
 let heartbeatInFlight = false;
 let disconnecting = false;
 let terminalPaused = false;
@@ -196,6 +200,7 @@ function setConnection(connected, { announce = true } = {}) {
     setCaptureStatus('Ready', '16 kHz · 16-bit · raw stereo');
     setSystemState('idle', { announce });
     void refreshTranscriptionStatus();
+    void refreshAssistantStatus();
   } else {
     els.linkReadout.textContent = 'Down';
     els.wakeEngineReadout.textContent = 'Offline';
@@ -203,10 +208,30 @@ function setConnection(connected, { announce = true } = {}) {
     els.wakeStatus.textContent = 'Wake engine offline';
     els.wakeEngineDetail.textContent = 'Offline';
     els.sttStatus.textContent = 'Offline';
+    els.assistantStatus.textContent = 'Offline';
     setCaptureStatus('Offline', 'Connect to Franky to begin');
     setSystemState('offline', { announce: false });
     clearTimeout(transcriptionStatusTimer);
     transcriptionStatusTimer = undefined;
+    clearTimeout(assistantStatusTimer);
+    assistantStatusTimer = undefined;
+  }
+}
+
+async function refreshAssistantStatus() {
+  clearTimeout(assistantStatusTimer);
+  assistantStatusTimer = undefined;
+  try {
+    const response = await fetch('/api/assistant/status', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`status ${response.status}`);
+    const status = await response.json();
+    els.assistantStatus.textContent = status.toolSelectionEnabled ? 'Ready · tools' : 'Demo · no tools';
+    els.assistantMeta.textContent = status.toolSelectionEnabled
+      ? `${status.provider} · model-selected named capabilities`
+      : 'Local demo · configure FRANKY_ASSISTANT_PROVIDER to enable model-selected commands';
+  } catch {
+    els.assistantStatus.textContent = 'Unavailable';
+    els.assistantMeta.textContent = 'Start Franky with the control-board runtime';
   }
 }
 
@@ -753,19 +778,33 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
   els.wakeCaptureMode.textContent = 'Local Whisper is processing';
 
   try {
-    const response = await fetch('/api/transcriptions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'audio/wav' },
-      body: wave,
-    });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || `Transcription failed (${response.status})`);
-    if (sequence !== transcriptionSequence || !isConnected()) return;
+    let transcription;
+    try {
+      const response = await fetch('/api/transcriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'audio/wav' },
+        body: wave,
+      });
+      transcription = await response.json();
+      if (!response.ok) {
+        throw new Error(transcription.detail || `Transcription failed (${response.status})`);
+      }
+    } catch (error) {
+      if (sequence !== transcriptionSequence || !isConnected()) return;
+      els.wakeStatus.textContent = 'Transcription failed · wake word will retry';
+      els.wakeCaptureMode.textContent = 'Local transcription needs attention';
+      setCaptureStatus('Transcription failed', error.message);
+      setSystemState('error');
+      appendTerminal('ERROR', `Could not transcribe speech · ${error.message}`, 'error-line');
+      void refreshTranscriptionStatus();
+      return;
+    }
 
-    const transcript = String(result.text || '').trim();
+    if (sequence !== transcriptionSequence || !isConnected()) return;
+    const transcript = String(transcription.text || '').trim();
     if (!transcript) {
       els.lastTranscript.textContent = 'Nothing understood.';
-      els.transcriptMeta.textContent = `${result.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s · no text returned`;
+      els.transcriptMeta.textContent = `${transcription.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s · no text returned`;
       els.wakeStatus.textContent = `No speech recognized · listening for “${wakeProfile.phraseLabel}”`;
       els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
       setCaptureStatus('Ready', 'The clip did not contain recognizable speech');
@@ -776,30 +815,71 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
 
     els.lastTranscript.textContent = transcript;
     els.transcriptMeta.textContent =
-      `${result.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s audio · ${(result.elapsedMs / 1000).toFixed(1)} s processing`;
-    els.wakeStatus.textContent = `Transcript ready · listening for “${wakeProfile.phraseLabel}”`;
-    els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
-    setCaptureStatus('Transcript ready', 'Wake audio was discarded after local transcription');
+      `${transcription.model || 'Local Whisper'} · ${durationSeconds.toFixed(1)} s audio · ${(transcription.elapsedMs / 1000).toFixed(1)} s processing`;
     appendTerminal('HEARD', transcript, 'transcript-line');
-    setSystemState('success');
-    clearTimeout(transcriptStateTimer);
-    transcriptStateTimer = setTimeout(() => {
-      if (isConnected() && currentState === 'success') setSystemState('idle');
-    }, 1400);
-  } catch (error) {
-    if (sequence !== transcriptionSequence || !isConnected()) return;
-    els.wakeStatus.textContent = 'Transcription failed · wake word will retry';
-    els.wakeCaptureMode.textContent = 'Local transcription needs attention';
-    setCaptureStatus('Transcription failed', error.message);
-    setSystemState('error');
-    appendTerminal('ERROR', `Could not transcribe speech · ${error.message}`, 'error-line');
-    void refreshTranscriptionStatus();
+
+    try {
+      await processAssistantTurn(transcript, sequence);
+    } catch (error) {
+      if (sequence !== transcriptionSequence || !isConnected()) return;
+      els.lastReply.textContent = 'I could not complete that request.';
+      els.assistantMeta.textContent = error.message;
+      els.wakeStatus.textContent = `Assistant unavailable · listening for “${wakeProfile.phraseLabel}”`;
+      els.wakeCaptureMode.textContent = 'The transcript was understood; the assistant turn failed';
+      setCaptureStatus('Assistant failed', error.message);
+      setSystemState('error');
+      appendTerminal('ERROR', `Could not process the request · ${error.message}`, 'error-line');
+      void refreshAssistantStatus();
+    }
   } finally {
     if (sequence === transcriptionSequence) {
       transcriptionInFlight = false;
       finishCapture();
     }
   }
+}
+
+async function processAssistantTurn(transcript, sequence) {
+  setSystemState('processing');
+  setCaptureStatus('Understanding', 'Matching the request to Franky’s named capabilities');
+  els.wakeStatus.textContent = 'Franky is thinking…';
+  els.wakeCaptureMode.textContent = 'Model-selected command routing';
+  appendTerminal('INTENT', 'Selecting an allowlisted capability', 'intent-line');
+
+  const response = await fetch('/api/assistant/turns', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: transcript }),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.detail || `Assistant request failed (${response.status})`);
+  if (sequence !== transcriptionSequence || !isConnected()) return;
+
+  const actions = Array.isArray(result.actions) ? result.actions : [];
+  for (const action of actions) {
+    const name = String(action.name || 'unknown action');
+    const success = action.success === true;
+    appendTerminal(
+      'ACTION',
+      `${name} · ${success ? 'success' : 'failed'}`,
+      success ? 'action-line' : 'error-line');
+  }
+
+  const reply = String(result.text || '').trim() || 'Request completed without a text response.';
+  els.lastReply.textContent = reply;
+  els.assistantMeta.textContent =
+    `${result.provider || 'Franky'} · ${Number(result.toolCallsExecuted) || 0} named action${result.toolCallsExecuted === 1 ? '' : 's'}`;
+  els.wakeStatus.textContent = `Request complete · listening for “${wakeProfile.phraseLabel}”`;
+  els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
+  setCaptureStatus('Request complete', 'Wake audio was discarded after local transcription');
+  appendTerminal('FRANKY', reply, 'assistant-line');
+
+  const actionFailed = actions.some(action => action.success !== true);
+  setSystemState(actionFailed ? 'error' : 'success');
+  clearTimeout(transcriptStateTimer);
+  transcriptStateTimer = setTimeout(() => {
+    if (isConnected() && currentState === 'success') setSystemState('idle');
+  }, 1400);
 }
 
 function updateEmptyState() {
@@ -889,6 +969,7 @@ setConnection(false, { announce: false });
 selectFeature('audio');
 appendTerminal('SYSTEM', 'Franky control board loaded · waiting for connection');
 void refreshTranscriptionStatus();
+void refreshAssistantStatus();
 
 if (!('serial' in navigator)) {
   els.connectButton.disabled = true;

@@ -11,6 +11,6 @@ public sealed class DemoConversationClient : IConversationClient
     {
         cancellationToken.ThrowIfCancellationRequested();
         var reply = $"[demo] I received: {userText}";
-        return Task.FromResult(new AssistantReply(reply, ToolCallsExecuted: 0));
+        return Task.FromResult(new AssistantReply(reply, ToolCallsExecuted: 0, Actions: []));
     }
 }

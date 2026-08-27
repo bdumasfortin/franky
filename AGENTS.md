@@ -12,9 +12,14 @@ fallback wake detection, voice-activity endpointing, speaker cues, status LEDs,
 and local Whisper transcription are verified. A custom **“Yo Franky”** model is
 trained, flashed, boot-stable, and verified in an initial physical spoken test.
 Longer-term miss and false-activation behavior is still being observed.
-Authenticated Wi-Fi/WebSocket transport,
-transcript-to-conversation wiring, and spoken responses remain planned. Franky
-does not depend on the official Home Assistant platform.
+The loopback control-board service now connects completed transcripts to the
+existing conversation and allowlisted-command path, with structured action
+outcomes and an honest demo/no-tools fallback. Local Ollama with `qwen3.5:4b`
+is the selected conversation provider, with the OpenAI adapter retained for a
+future cloud switch. Live Ollama tool selection is verified through the
+loopback endpoint; the physical spoken-command path still needs verification. Authenticated
+Wi-Fi/WebSocket transport, on-board named SFX playback, and spoken responses
+remain planned. Franky does not depend on the official Home Assistant platform.
 
 ## Working rules
 
