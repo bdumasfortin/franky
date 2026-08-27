@@ -1,0 +1,46 @@
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+secrets.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage.xml
+htmlcov/
+
+# JavaScript / TypeScript
+node_modules/
+coverage/
+
+# Build output
+build/
+dist/
+out/
+bin/
+obj/
+*.log
+
+# ESP32 tooling
+.pio/
+firmware/backups/
+firmware/**/build/
+firmware/**/managed_components/
+firmware/**/sdkconfig
+firmware/**/sdkconfig.old
+firmware/**/dependencies.lock
+
+# IDE and operating system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Temporary review artifacts; canonical decisions live under docs/
+.lavish/

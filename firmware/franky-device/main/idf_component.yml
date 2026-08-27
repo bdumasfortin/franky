@@ -1,0 +1,4 @@
+dependencies:
+  espressif/esp-sr: "2.1.5"
+  espressif/esp_codec_dev: "1.5.1"
+  espressif/led_strip: "3.0.1"

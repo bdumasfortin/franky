@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Franky</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main id="appRoot" class="app-frame" data-state="offline" data-connected="false">
+    <section class="offline-app" aria-label="Franky is offline">
+      <div class="offline-indicator"><i class="state-dot"></i><span>Offline</span></div>
+      <button id="connectButton" class="offline-connect" type="button">Connect to Franky</button>
+    </section>
+
+    <section class="connected-app" aria-label="Franky control board">
+      <div class="control-grid">
+        <div class="left-stack">
+          <section class="module core-module" aria-label="Franky system state">
+            <div class="core-stage">
+              <div class="heart-wrap">
+                <div class="heart" aria-hidden="true">
+                  <i class="ring ring-a"></i>
+                  <i class="ring ring-b"></i>
+                  <i class="ring ring-c"></i>
+                  <i class="pulse"></i>
+                  <span id="coreCenter" class="core-center">Idle</span>
+                </div>
+              </div>
+              <div class="core-readout">
+                <small>Current mode</small>
+                <strong id="coreReadout">Ready</strong>
+                <div class="readout-row"><span>Wake</span><b id="wakeEngineReadout">Armed</b></div>
+                <div class="readout-row"><span>Mic</span><b>Stereo</b></div>
+                <div class="readout-row"><span>Link</span><b id="linkReadout">Stable</b></div>
+              </div>
+            </div>
+          </section>
+
+          <nav class="feature-nav" aria-label="Franky features">
+            <button class="feature-tab active" type="button" data-feature="audio">Audio</button>
+            <button class="feature-tab" type="button" data-feature="leds">LEDs</button>
+            <button class="feature-tab" type="button" data-feature="wake">Wake</button>
+            <button class="feature-tab" type="button" data-feature="device">Device</button>
+          </nav>
+
+          <section class="module feature-module">
+            <div class="module-head"><span id="featureTitle">Audio testing</span><span id="featureMeta">Ready</span></div>
+
+            <div class="feature-panel active" data-feature-panel="audio">
+              <label class="label-field">
+                <span>Label or distance</span>
+                <input id="labelInput" type="text" maxlength="60" placeholder="e.g. 12 ft, facing Franky">
+              </label>
+
+              <div class="compact-fields">
+                <label>Microphone
+                  <select id="channelSelect">
+                    <option value="mix">Both · mono mix</option>
+                    <option value="mic-a">Mic A only</option>
+                    <option value="mic-b">Mic B only</option>
+                    <option value="stereo" selected>Both · raw stereo</option>
+                  </select>
+                </label>
+                <label>Length
+                  <select id="durationSelect">
+                    <option value="3000">3 seconds</option>
+                    <option value="5000" selected>5 seconds</option>
+                    <option value="10000">10 seconds</option>
+                    <option value="15000">15 seconds</option>
+                  </select>
+                </label>
+                <label>Gain
+                  <select id="gainSelect">
+                    <option value="6">6 dB</option>
+                    <option value="12">12 dB</option>
+                    <option value="18">18 dB</option>
+                    <option value="24">24 dB</option>
+                    <option value="30" selected>30 dB</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="action-row">
+                <button id="recordButton" class="primary-action" type="button" disabled>Record audio</button>
+                <button id="stopButton" class="secondary-action" type="button" disabled>Stop</button>
+                <span class="action-status"><strong id="captureStatus">Ready</strong><small id="captureDetail">16 kHz · 16-bit · raw stereo</small></span>
+              </div>
+
+              <div class="subhead"><span>Recent recordings</span><button id="clearButton" type="button" disabled>Clear</button></div>
+              <div id="emptyState" class="recordings-empty">No recordings in this session.</div>
+              <div id="recordings" class="recordings"></div>
+            </div>
+
+            <div class="feature-panel" data-feature-panel="leds">
+              <div class="led-grid" aria-label="Preview an LED state">
+                <button class="led-state state-chip" type="button" data-state="offline" style="--led:#9a531d" disabled><i></i>Offline</button>
+                <button class="led-state state-chip" type="button" data-state="idle" style="--led:#22b8c3" disabled><i></i>Idle</button>
+                <button class="led-state state-chip" type="button" data-state="listening" style="--led:#2775e8" disabled><i></i>Listening</button>
+                <button class="led-state state-chip" type="button" data-state="processing" style="--led:#a34fe0" disabled><i></i>Processing</button>
+                <button class="led-state state-chip" type="button" data-state="speaking" style="--led:#f1c98d" disabled><i></i>Speaking</button>
+                <button class="led-state state-chip" type="button" data-state="success" style="--led:#34c759" disabled><i></i>Success</button>
+                <button class="led-state state-chip" type="button" data-state="error" style="--led:#ff4d57" disabled><i></i>Error</button>
+                <button class="led-state state-chip" type="button" data-state="updating" style="--led:#f28b24" disabled><i></i>Updating</button>
+              </div>
+              <div class="feature-note"><strong>Board LED preview</strong><span>Franky returns to the real system state when activity changes.</span></div>
+            </div>
+
+            <div id="wakeMonitor" class="feature-panel" data-feature-panel="wake">
+              <div class="wake-card">
+                <span id="wakeStatus" class="wake-phrase">Listening for “Hi ESP”</span>
+                <p>WakeNet listens locally on the board. Future wake-word candidates are “Yo Franky” and “Franky.”</p>
+              </div>
+              <div class="wake-stats">
+                <div>Session detections<strong id="wakeCount">0</strong></div>
+                <div>Last heard<strong id="lastWake">Never</strong></div>
+                <div>Transcriber<strong id="sttStatus">Preparing</strong></div>
+              </div>
+              <div class="transcript-card">
+                <span>Last transcript</span>
+                <p id="lastTranscript">Say “Hi ESP” and then speak naturally.</p>
+                <small id="transcriptMeta">Local Whisper · transcripts are not saved</small>
+              </div>
+              <div class="feature-note"><strong id="wakeCaptureMode">Natural endpointing enabled</strong><span>Franky stops listening after trailing silence, with a 20-second safety cap.</span></div>
+            </div>
+
+            <div class="feature-panel" data-feature-panel="device">
+              <div class="device-grid">
+                <div><span>Firmware</span><strong>Franky Device v3</strong></div>
+                <div><span>Connection</span><strong id="deviceConnection">USB serial</strong></div>
+                <div><span>Microphones</span><strong>ES7210 · stereo</strong></div>
+                <div><span>Speaker</span><strong>ES8311 · ready</strong></div>
+                <div><span>Wake engine</span><strong>WakeNet9</strong></div>
+                <div><span>Audio stream</span><strong id="deviceAudioFormat">16 kHz · 16-bit</strong></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section class="module terminal-module" aria-label="Franky output terminal">
+          <div class="module-head">
+            <span>Franky output</span>
+            <span class="terminal-actions">
+              <button id="terminalPauseButton" type="button">Pause</button>
+              <button id="terminalClearButton" type="button">Clear</button>
+              <button id="disconnectButton" class="disconnect-control" type="button">Disconnect</button>
+            </span>
+          </div>
+          <div id="terminalLog" class="terminal-log" role="log" aria-live="polite"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <template id="recordingTemplate">
+    <article class="recording-card">
+      <div class="recording-topline">
+        <div><strong class="recording-label"></strong><small class="recording-meta"></small></div>
+        <div class="levels"></div>
+      </div>
+      <canvas class="waveform" aria-label="Recording waveform"></canvas>
+      <div class="playback-row">
+        <audio controls preload="metadata"></audio>
+        <a class="download-button" download>WAV</a>
+        <button class="delete-button" type="button">Remove</button>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
