@@ -42,6 +42,13 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
   now drives that pin high on every boot. The revised image built, flashed, and
   booted successfully, and the user manually confirmed both the rising
   connection cue and falling disconnection cue were audible again.
+- On 2026-08-27 the firmware image containing the cleaned embedded “SUUUPER”
+  clip was built and flashed. A direct `SFX frankys_suuuper` request reported
+  protocol version 5, `SFX_START`, the `speaking` state, and `SFX_DONE` without
+  a firmware error. The user confirmed that playback was audible but judged it
+  too quiet. The current flashed image keeps the board-wide codec volume at 80
+  and raises only the named clip to the codec maximum of 100, pending a
+  listening check.
 
 These observations verify the USB data path, MCU identification, memory capacities, factory-firmware boot, stereo microphone capture, local wake detection, voice-activity endpointing, state LEDs, speaker cues, and the complete wake-to-transcript development path. They do not verify the planned Wi-Fi transport or full spoken-response playback.
 

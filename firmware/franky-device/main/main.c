@@ -24,6 +24,8 @@
 #define WAKE_SPEECH_START_TIMEOUT_MS 4000
 #define WAKE_MAX_SPEECH_MS 20000
 #define WAKE_ACTION_TASK_STACK_SIZE 8192
+#define FRANKY_PROTOCOL_VERSION 5
+#define SUUUPER_SFX_NAME "frankys_suuuper"
 
 typedef struct {
     uint32_t duration_ms;
@@ -37,11 +39,15 @@ static volatile uint32_t s_last_host_contact_ms;
 static float s_gain_db = DEFAULT_GAIN_DB;
 
 static void start_recording(uint32_t duration_ms);
+static uint32_t now_ms(void);
+static void show_state(system_led_state_t state);
+static void show_resting_state(void);
 
 static void print_device_info(void)
 {
     printf(
-        "READY FRANKY_DEVICE 4 %u %u 16 %.1f\n",
+        "READY FRANKY_DEVICE %u %u %u 16 %.1f\n",
+        FRANKY_PROTOCOL_VERSION,
         FRANKY_SAMPLE_RATE,
         FRANKY_CHANNELS,
         s_gain_db);
@@ -49,6 +55,41 @@ static void print_device_info(void)
         "WAKE_ENGINE %s %s\n",
         wake_word_engine_name(),
         wake_word_phrase_id());
+}
+
+static void play_named_sfx(const char *sfx_name)
+{
+    if (strcmp(sfx_name, SUUUPER_SFX_NAME) != 0) {
+        printf("ERROR unknown_sfx\n");
+        show_state(SYSTEM_LED_ERROR);
+        return;
+    }
+    if (s_recording || s_wake_action_pending) {
+        printf("ERROR audio_capture_in_progress\n");
+        return;
+    }
+
+    esp_err_t pause_error = wake_word_pause();
+    if (pause_error != ESP_OK) {
+        printf("ERROR wake_detector_did_not_pause\n");
+        show_state(SYSTEM_LED_ERROR);
+        wake_word_resume();
+        return;
+    }
+
+    printf("SFX_START %s\n", sfx_name);
+    show_state(SYSTEM_LED_SPEAKING);
+    esp_err_t playback_error = audio_board_play_sfx(AUDIO_SFX_FRANKY_SUUUPER);
+    if (playback_error == ESP_OK) {
+        printf("SFX_DONE %s\n", sfx_name);
+    } else {
+        printf("ERROR sfx_playback_failed_%s\n", esp_err_to_name(playback_error));
+        show_state(SYSTEM_LED_ERROR);
+    }
+
+    wake_word_resume();
+    s_last_host_contact_ms = now_ms();
+    show_resting_state();
 }
 
 static uint32_t now_ms(void)
@@ -369,6 +410,12 @@ static void handle_command(char *line)
                 show_state(SYSTEM_LED_ERROR);
             }
         }
+        return;
+    }
+
+    char sfx_name[32];
+    if (sscanf(line, "SFX %31s", sfx_name) == 1) {
+        play_named_sfx(sfx_name);
         return;
     }
 

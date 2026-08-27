@@ -32,9 +32,17 @@
 #define READ_CHUNK_FRAMES 256
 #define PLAY_CHUNK_FRAMES 256
 #define DEFAULT_INPUT_GAIN_DB 30.0f
-#define DEFAULT_OUTPUT_VOLUME 55
+#define DEFAULT_OUTPUT_VOLUME 80
+#define SUUUPER_OUTPUT_VOLUME 100
 #define TONE_RAMP_FRAMES 64
 #define TWO_PI 6.28318530717958647692f
+
+#if FRANKY_HAS_SUUUPER_SFX
+extern const uint8_t frankys_suuuper_pcm_start[]
+    asm("_binary_frankys_suuuper_pcm_start");
+extern const uint8_t frankys_suuuper_pcm_end[]
+    asm("_binary_frankys_suuuper_pcm_end");
+#endif
 
 static i2s_chan_handle_t s_tx_handle;
 static i2s_chan_handle_t s_rx_handle;
@@ -362,6 +370,35 @@ static esp_err_t write_silence(uint32_t duration_ms)
     return ESP_OK;
 }
 
+static esp_err_t write_mono_pcm(const int16_t *mono_samples, size_t sample_count)
+{
+    if (mono_samples == NULL || sample_count == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    int32_t samples[PLAY_CHUNK_FRAMES * FRANKY_CHANNELS];
+    for (size_t first_sample = 0; first_sample < sample_count;) {
+        size_t chunk_samples = sample_count - first_sample;
+        if (chunk_samples > PLAY_CHUNK_FRAMES) chunk_samples = PLAY_CHUNK_FRAMES;
+
+        for (size_t index = 0; index < chunk_samples; ++index) {
+            const int32_t output_sample =
+                (int32_t)mono_samples[first_sample + index] * 65536;
+            samples[index * FRANKY_CHANNELS] = output_sample;
+            samples[index * FRANKY_CHANNELS + 1] = output_sample;
+        }
+
+        const size_t chunk_bytes =
+            chunk_samples * FRANKY_CHANNELS * sizeof(int32_t);
+        if (esp_codec_dev_write(s_play_device, samples, chunk_bytes) != ESP_CODEC_DEV_OK) {
+            return ESP_FAIL;
+        }
+        first_sample += chunk_samples;
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t audio_board_play_cue(audio_cue_t cue)
 {
     if (s_play_device == NULL || s_playback_mutex == NULL) {
@@ -401,6 +438,52 @@ esp_err_t audio_board_play_cue(audio_cue_t cue)
 
     xSemaphoreGive(s_playback_mutex);
     return error;
+}
+
+esp_err_t audio_board_play_sfx(audio_sfx_t sfx)
+{
+    if (s_play_device == NULL || s_playback_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (sfx != AUDIO_SFX_FRANKY_SUUUPER) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+#if !FRANKY_HAS_SUUUPER_SFX
+    return ESP_ERR_NOT_SUPPORTED;
+#else
+    const size_t pcm_bytes =
+        (size_t)(frankys_suuuper_pcm_end - frankys_suuuper_pcm_start);
+    if (pcm_bytes == 0 || (pcm_bytes % sizeof(int16_t)) != 0) {
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    if (xSemaphoreTake(s_playback_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t error = ESP_OK;
+    if (esp_codec_dev_set_out_vol(s_play_device, SUUUPER_OUTPUT_VOLUME) != ESP_CODEC_DEV_OK) {
+        error = ESP_FAIL;
+    } else if (esp_codec_dev_set_out_mute(s_play_device, false) != ESP_CODEC_DEV_OK) {
+        error = ESP_FAIL;
+    }
+    if (error == ESP_OK) error = write_silence(20);
+    if (error == ESP_OK) {
+        error = write_mono_pcm(
+            (const int16_t *)frankys_suuuper_pcm_start,
+            pcm_bytes / sizeof(int16_t));
+    }
+    if (error == ESP_OK) error = write_silence(100);
+    const int mute_result = esp_codec_dev_set_out_mute(s_play_device, true);
+    if (error == ESP_OK && mute_result != ESP_CODEC_DEV_OK) error = ESP_FAIL;
+    const int volume_result =
+        esp_codec_dev_set_out_vol(s_play_device, DEFAULT_OUTPUT_VOLUME);
+    if (error == ESP_OK && volume_result != ESP_CODEC_DEV_OK) error = ESP_FAIL;
+
+    xSemaphoreGive(s_playback_mutex);
+    return error;
+#endif
 }
 
 esp_err_t audio_board_read_stereo(int16_t *stereo_samples, size_t frame_count)

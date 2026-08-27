@@ -20,7 +20,12 @@ through Franky's conversation provider. Model tool calls remain constrained to
 the fixed named-command allowlist, and the Wake area displays the transcript,
 structured action outcome, and Franky reply separately. The current proof
 commands report the operating-system account running Franky and the installed
-.NET SDK version.
+.NET SDK version. A separate fixed device action maps questions such as “How is
+it going?” to the embedded `frankys_suuuper` clip. The browser sends only the
+allowlisted firmware command and does not show playback as successful until the
+board returns `SFX_DONE`. Common short wording and contraction variants are
+matched locally before Ollama so the signature response is not dependent on a
+probabilistic tool choice.
 
 ## Run
 
@@ -35,7 +40,8 @@ commands report the operating-system account running Franky and the installed
    build—wait for the acknowledgement, and speak naturally. Franky stops after
    trailing silence, shows the local transcript, and processes it as an
    assistant turn. Try “What version of .NET are you running?” or “Which user
-   account are you running as?” Use the Audio area for manual recordings.
+   account are you running as?” Ask “How is it going?” to request the embedded
+   Franky clip. Use the Audio area for manual recordings.
 
 Manual clips remain in browser memory unless downloaded. Wake clips are
 discarded after transcription and transcript text is not persisted. Audio stays

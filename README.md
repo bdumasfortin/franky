@@ -17,8 +17,12 @@ recognition and will grow into conversation and home-control features.
 > provider, while OpenAI remains an optional cloud adapter. The HTTP bridge and
 > both provider tool loops are locally tested, and live Ollama selected both
 > read-only diagnostics correctly through the loopback endpoint. The full
-> physical spoken-command path still needs observation. Wi-Fi transport and
-> spoken answers remain ahead.
+> physical spoken-command path still needs observation. The first named device
+> action is implemented and flashed: asking Franky how it is going requests an
+> embedded “SUUUPER” clip and waits for the board to acknowledge completion.
+> Direct serial start/completion and live Ollama intent selection are verified;
+> audible playback and the complete spoken path await user observation. Wi-Fi
+> transport and generated spoken answers remain ahead.
 
 ## What works today
 
@@ -29,13 +33,19 @@ recognition and will grow into conversation and home-control features.
 - Natural utterance capture that stops after trailing silence.
 - Local speech-to-text with Whisper `small.en`, accelerated by an NVIDIA GPU
   when CUDA is available and backed by a CPU fallback.
-- Speaker cues for connection, disconnection, and wake acknowledgement.
+- Speaker cues for connection, disconnection, and wake acknowledgement, plus
+  an embedded named “SUUUPER” clip.
 - A seven-pixel status ring with state colors and an offline breathing animation.
 - A local browser control board for audio, LED, wake-word, and device testing.
 - A .NET conversation pipeline with local Ollama, deterministic demo, optional
   OpenAI providers, and strictly allowlisted read-only commands.
 - A loopback assistant-turn endpoint that connects wake transcripts to that
   conversation path and reports model-selected actions separately from replies.
+- A fixed `device.sfx.frankys_suuuper` action that maps natural questions about
+  how Franky is doing to one firmware command; the UI reports success only
+  after the ESP32 finishes playback.
+- A local exact-intent router for common forms such as “How's it going?” so this
+  signature response does not depend on probabilistic model tool selection.
 
 ## How it fits together
 
@@ -67,6 +77,7 @@ Open the loopback page, choose **Connect to Franky**, and select the Espressif
 USB serial device. The Wake area shows the phrase actually armed by the board.
 On the current build, say **“Yo Franky”**, wait for the acknowledgement cue,
 then speak naturally. The recognized text appears in the Wake area and terminal.
+Ask **“How is it going?”** to request Franky's embedded “SUUUPER” response.
 The launcher uses local Ollama with `qwen3.5:4b` by default, so that transcript
 continues through Franky's conversation provider and may invoke one of the two
 fixed read-only diagnostics without a cloud key. Use `-AssistantProvider demo`
@@ -108,7 +119,7 @@ not an application credential. Setup and privacy details live in the
 
 | Path | Purpose |
 | --- | --- |
-| [`firmware/franky-device/`](firmware/franky-device/) | ESP32 firmware for microphones, wake detection, speaker cues, and LEDs |
+| [`firmware/franky-device/`](firmware/franky-device/) | ESP32 firmware for microphones, wake detection, embedded audio, speaker cues, and LEDs |
 | [`services/Franky.Runtime/`](services/Franky.Runtime/) | Computer-hosted .NET runtime and local transcription service |
 | [`tools/franky-control-board/`](tools/franky-control-board/) | Local browser interface for developing and testing Franky |
 | [`tools/wake-word/`](tools/wake-word/) | Reproducible local training workspace for “Yo Franky” |

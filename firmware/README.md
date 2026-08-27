@@ -15,17 +15,28 @@ The board's USB, factory-boot, microphone, speaker, LED, wake-word, and voice-ac
 - uses the ESP-SR Audio Front End to stop wake capture after trailing silence;
 - explicitly enables the NS4150B speaker amplifier through TCA9555 expander
   pin 8 on every boot, then plays connection, disconnection, and wake
-  acknowledgement cues; and
+  acknowledgement cues;
+- embeds a cleaned 16 kHz mono PCM “SUUUPER” clip and exposes it only through
+  the fixed `SFX frankys_suuuper` serial command, with start and completion
+  acknowledgements;
+- uses a board-wide output-codec volume of 80, temporarily raised to 100 only
+  for the named “SUUUPER” clip; and
 - renders system state through the seven-pixel RGB ring, including a
   high-refresh, dithered offline breathing animation for smooth low-light fades.
 
 The computer receives the bounded wake utterance and transcribes it locally. Wi-Fi/WebSocket transport remains the target deployment path and is not implemented in this firmware yet.
 
-The current model-enabled image has been built, flashed, booted, and observed
+The previous model-enabled image has been built, flashed, booted, and observed
 idle on the physical board without watchdog faults. The board reports
 `WAKE_ENGINE microwakeword yo_franky`, and the user confirmed successful spoken
 detection in the physical room. Longer-term miss and false-activation behavior
 remains a tuning concern rather than a completed measurement.
+
+The named-SFX image builds, fits the current application partition, and is
+flashed on the board. A direct command returned both `SFX_START` and `SFX_DONE`;
+audible playback and the full spoken request path are not yet recorded as user
+observations. Asset format and provenance details are in
+[`franky-device/main/sfx/README.md`](franky-device/main/sfx/README.md).
 
 ## Toolchain
 

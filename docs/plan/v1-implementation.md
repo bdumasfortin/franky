@@ -47,20 +47,30 @@ generation.
 - Live `qwen3.5:4b` selected and executed both read-only diagnostics through the
   loopback endpoint. Background model preloading avoids the observed cold-load
   penalty; the physical spoken path remains unverified.
+- A cleaned, metadata-free 16 kHz mono “SUUUPER” asset is embedded in firmware.
+- `SFX frankys_suuuper` has explicit start/completion acknowledgements, and the
+  browser maps only the fixed `device.sfx.frankys_suuuper` action to it.
+- Both conversation providers describe the natural “How is it going?” intent,
+  and the UI waits for board completion rather than treating model selection as
+  playback success.
+- The image is flashed, a direct serial request returned `SFX_START` and
+  `SFX_DONE`, and live `qwen3.5:4b` selected the exact device action for “How is
+  it going?” A physical “How's it going?” test then returned text with no action,
+  so common short variants now route through a narrow deterministic matcher
+  before the model. Audible playback through the corrected browser path still
+  requires user observation.
 
 ## Active vertical slice
 
-Prove the implemented bridge with a live model-selected spoken command, then add
-the first requested board capability:
+Prove the implemented bridge and first device action on the physical voice path:
 
 1. Run both read-only diagnostic requests through the physical wake path and
    record observed latency while Whisper and Ollama share the GPU.
-2. Choose or create one short SFX asset and a clear spoken request for it.
-3. Add a named firmware command that plays only that embedded asset and returns
-   an explicit completion or failure acknowledgement.
-4. Bridge the browser-owned serial action into the assistant tool continuation;
-   do not let the model claim playback succeeded before the board acknowledges it.
-5. Keep wake audio and transcripts ephemeral unless persistence is explicitly designed later.
+2. Confirm the direct `SFX frankys_suuuper` playback was audible; its firmware
+   start and completion acknowledgements are already verified.
+3. Say “Yo Franky”, then “How is it going?”, and verify the already-tested local model selects
+   the fixed action and the UI reports success only after playback.
+4. Keep wake audio and transcripts ephemeral unless persistence is explicitly designed later.
 
 ## Following increments
 

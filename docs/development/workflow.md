@@ -18,8 +18,13 @@ conversation and safe-command pipeline and returns separate action and reply
 results. This bridge and both real-provider request shapes are locally tested.
 Live Ollama selected and executed both read-only diagnostics through the
 loopback endpoint. The physical wake-to-command path remains unverified. The
-first requested device capability is named SFX playback,
-followed by spoken responses. Wi-Fi/WebSocket transport remains the intended
+first requested device capability—named “SUUUPER” SFX playback—is implemented
+and flashed with an explicit board completion acknowledgement. The board
+returned both acknowledgements for a direct request, and live Ollama selected
+the action from “How is it going?” Because it missed the contraction “How's it
+going?” in a later physical test, common short variants now route locally before
+the model. The corrected physical voice path remains unverified. Generated spoken responses follow.
+Wi-Fi/WebSocket transport remains the intended
 room deployment but is not implemented yet.
 
 ## Secrets

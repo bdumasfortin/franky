@@ -47,8 +47,13 @@ endpoint that reuses the existing conversation session and allowlisted tool
 executor. Local Ollama with `qwen3.5:4b` is the current conversation provider;
 it keeps message history in memory. The OpenAI Responses adapter remains
 selectable for later cloud use. Provider-neutral tool definitions are mapped to
-each API without changing the fixed executor. Action outcomes return to the UI
-separately from assistant text. The ESP32 retains
+each API without changing the fixed executor. A composite executor routes exact
+tool names to either read-only host commands or fixed device actions. For the
+first device action, a narrow local matcher routes common “How is it going?”
+variants before the conversation model. The browser translates
+`device.sfx.frankys_suuuper` to one allowlisted USB command and waits for
+`SFX_DONE`; intent selection is not treated as device completion. Action outcomes return to the UI separately from
+assistant text. The ESP32 retains
 its ESP-SR Audio Front End for microphone processing and trailing-silence
 endpointing, and runs the custom “Yo Franky” streaming model through TensorFlow
 Lite Micro. [ADR-0007](../adr/0007-use-local-whisper-for-speech-to-text.md)

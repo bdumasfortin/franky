@@ -66,17 +66,31 @@ Before network implementation, this document must define the corresponding wake
 event, utterance metadata, size limits, acknowledgements, cancellation behavior,
 and retry policy.
 
-The USB development protocol is version 4 and reports its active configuration
+The USB development protocol is version 5 and reports its active configuration
 after each `READY` line:
 
 ```text
-READY FRANKY_DEVICE 4 16000 2 16 30.0
+READY FRANKY_DEVICE 5 16000 2 16 30.0
 WAKE_ENGINE microwakeword yo_franky
 ```
 
 Fallback firmware reports `WAKE_ENGINE wakenet9 hi_esp`. A detection uses the
 same phrase identifier, for example `WAKE yo_franky`. The browser must render
 the reported engine and phrase rather than assuming one.
+
+## USB named SFX extension
+
+The version 5 USB protocol accepts one allowlisted playback command:
+
+```text
+SFX frankys_suuuper
+```
+
+The board responds with `SFX_START frankys_suuuper`, enters the semantic
+`speaking` state, plays the embedded PCM, and returns
+`SFX_DONE frankys_suuuper` only after the codec write completes. Unsupported
+names return `ERROR unknown_sfx`. The browser uses a bounded acknowledgement
+timeout and treats disconnects and firmware errors as failures.
 
 ## Assistant state
 

@@ -62,6 +62,9 @@ const featurePresentation = {
   wake: ['Wake activity', 'Armed'],
   device: ['Device information', 'Online'],
 };
+const FRANKY_SUUUPER_ACTION = 'device.sfx.frankys_suuuper';
+const FRANKY_SUUUPER_SFX = 'frankys_suuuper';
+const SFX_PLAYBACK_TIMEOUT_MS = 12000;
 
 let port;
 let reader;
@@ -80,6 +83,7 @@ let disconnecting = false;
 let terminalPaused = false;
 let transcriptionInFlight = false;
 let transcriptionSequence = 0;
+let pendingSfxPlayback;
 let wakeCount = 0;
 let currentState = 'offline';
 let wakeProfile = {
@@ -341,6 +345,28 @@ function handleLine(line) {
     return;
   }
 
+  if (line.startsWith('SFX_START ')) {
+    const sfxName = line.split(/\s+/)[1];
+    if (!sfxName) return;
+    setSystemState('speaking');
+    setCaptureStatus('Speaking', 'Franky is playing the requested sound');
+    els.wakeStatus.textContent = 'Franky is speaking…';
+    appendTerminal('ACTION', `${sfxName} · playing`, 'action-line');
+    return;
+  }
+
+  if (line.startsWith('SFX_DONE ')) {
+    const sfxName = line.split(/\s+/)[1];
+    if (!sfxName) return;
+    if (pendingSfxPlayback?.name === sfxName) {
+      const pending = pendingSfxPlayback;
+      pendingSfxPlayback = undefined;
+      clearTimeout(pending.timeout);
+      pending.resolve();
+    }
+    return;
+  }
+
   if (line.startsWith('WAKE ')) {
     const phraseId = line.split(/\s+/)[1];
     if (!phraseId) return;
@@ -440,6 +466,12 @@ function handleLine(line) {
   if (line.startsWith('ERROR ')) {
     finishCapture();
     const message = line.slice(6).replaceAll('_', ' ');
+    if (pendingSfxPlayback) {
+      const pending = pendingSfxPlayback;
+      pendingSfxPlayback = undefined;
+      clearTimeout(pending.timeout);
+      pending.reject(new Error(message));
+    }
     setSystemState('error');
     setCaptureStatus('Board error', message);
     appendTerminal('ERROR', message, 'error-line');
@@ -478,6 +510,42 @@ async function readLoop() {
 async function sendCommand(command) {
   if (!writer) throw new Error('Franky is not connected.');
   await writer.write(textEncoder.encode(`${command}\n`));
+}
+
+async function playDeviceSfx(sfxName) {
+  if (sfxName !== FRANKY_SUUUPER_SFX) throw new Error('That device sound is not allowlisted.');
+  if (!writer || !isConnected()) throw new Error('Franky is not connected.');
+  if (pendingSfxPlayback) throw new Error('Franky is already playing a sound.');
+
+  let resolvePlayback;
+  let rejectPlayback;
+  const completion = new Promise((resolve, reject) => {
+    resolvePlayback = resolve;
+    rejectPlayback = reject;
+  });
+  const timeout = setTimeout(() => {
+    if (pendingSfxPlayback?.name !== sfxName) return;
+    const pending = pendingSfxPlayback;
+    pendingSfxPlayback = undefined;
+    pending.reject(new Error('The board did not acknowledge playback in time.'));
+  }, SFX_PLAYBACK_TIMEOUT_MS);
+  pendingSfxPlayback = {
+    name: sfxName,
+    resolve: resolvePlayback,
+    reject: rejectPlayback,
+    timeout,
+  };
+
+  try {
+    await sendCommand(`SFX ${sfxName}`);
+    await completion;
+  } catch (error) {
+    if (pendingSfxPlayback?.name === sfxName) {
+      clearTimeout(pendingSfxPlayback.timeout);
+      pendingSfxPlayback = undefined;
+    }
+    throw error;
+  }
 }
 
 function stopHeartbeat() {
@@ -537,6 +605,12 @@ async function disconnect({ notifyBoard = true, reason = 'Disconnected from Fran
   transcriptStateTimer = undefined;
   transcriptionSequence += 1;
   transcriptionInFlight = false;
+  if (pendingSfxPlayback) {
+    const pending = pendingSfxPlayback;
+    pendingSfxPlayback = undefined;
+    clearTimeout(pending.timeout);
+    pending.reject(new Error('Franky disconnected before playback finished.'));
+  }
 
   if (notifyBoard) {
     try {
@@ -856,25 +930,47 @@ async function processAssistantTurn(transcript, sequence) {
   if (sequence !== transcriptionSequence || !isConnected()) return;
 
   const actions = Array.isArray(result.actions) ? result.actions : [];
+  let actionFailed = false;
   for (const action of actions) {
     const name = String(action.name || 'unknown action');
     const success = action.success === true;
+
+    if (name === FRANKY_SUUUPER_ACTION) {
+      if (!success) {
+        actionFailed = true;
+        appendTerminal('ACTION', `${name} · rejected`, 'error-line');
+        continue;
+      }
+
+      appendTerminal('ACTION', `${name} · requested`, 'action-line');
+      try {
+        await playDeviceSfx(FRANKY_SUUUPER_SFX);
+        appendTerminal('ACTION', `${name} · success`, 'action-line');
+      } catch (error) {
+        actionFailed = true;
+        appendTerminal('ERROR', `${name} · ${error.message}`, 'error-line');
+      }
+      continue;
+    }
+
+    if (!success) actionFailed = true;
     appendTerminal(
       'ACTION',
       `${name} · ${success ? 'success' : 'failed'}`,
       success ? 'action-line' : 'error-line');
   }
 
+  if (sequence !== transcriptionSequence || !isConnected()) return;
+
   const reply = String(result.text || '').trim() || 'Request completed without a text response.';
   els.lastReply.textContent = reply;
   els.assistantMeta.textContent =
-    `${result.provider || 'Franky'} · ${Number(result.toolCallsExecuted) || 0} named action${result.toolCallsExecuted === 1 ? '' : 's'}`;
+    `${result.provider || 'Franky'} · ${actions.length} named action${actions.length === 1 ? '' : 's'}`;
   els.wakeStatus.textContent = `Request complete · listening for “${wakeProfile.phraseLabel}”`;
   els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
   setCaptureStatus('Request complete', 'Wake audio was discarded after local transcription');
   appendTerminal('FRANKY', reply, 'assistant-line');
 
-  const actionFailed = actions.some(action => action.success !== true);
   setSystemState(actionFailed ? 'error' : 'success');
   clearTimeout(transcriptStateTimer);
   transcriptStateTimer = setTimeout(() => {

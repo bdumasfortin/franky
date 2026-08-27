@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using Franky.Runtime.Configuration;
 using Franky.Runtime.Conversation;
 using Franky.Runtime.Diagnostics;
@@ -32,10 +33,12 @@ public static class ControlBoardApplication
         var options = AssistantOptions.FromEnvironment(arguments);
         var events = new JsonEventSink(Console.Error);
         var commandTool = new NamedCommandTool(new ProcessCommandRunner());
-        var conversationClient = ConversationClientFactory.Create(options, commandTool, events);
+        var deviceActionTool = new DeviceActionTool();
+        var toolExecutor = new CompositeToolExecutor(commandTool, deviceActionTool);
+        var conversationClient = ConversationClientFactory.Create(options, toolExecutor, events);
         builder.Services.AddSingleton(options);
         builder.Services.AddSingleton<IEventSink>(events);
-        builder.Services.AddSingleton<IToolExecutor>(commandTool);
+        builder.Services.AddSingleton<IToolExecutor>(toolExecutor);
         builder.Services.AddSingleton(conversationClient);
         builder.Services.AddSingleton<AssistantTurnCoordinator>();
         builder.Services.AddSingleton<ISpeechTranscriber, WhisperNetSpeechTranscriber>();
@@ -76,6 +79,27 @@ public static class ControlBoardApplication
                 return Results.Problem(
                     "The transcript is too large.",
                     statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
+            if (KnownDeviceIntentRouter.TryResolve(text, out var actionName))
+            {
+                var action = await deviceActionTool.ExecuteAsync(
+                    new ToolCall(
+                        DeviceActionTool.ToolName,
+                        JsonSerializer.Serialize(new { action_name = actionName })),
+                    requestCancellation);
+                events.Write("assistant.local_intent", new Dictionary<string, object?>
+                {
+                    ["action_name"] = actionName,
+                    ["success"] = action.Success,
+                });
+                return Results.Ok(new
+                {
+                    Text = "SUUUPER!",
+                    ToolCallsExecuted = 1,
+                    Actions = new[] { new AssistantActionOutcome(actionName, action.Success) },
+                    provider = "Franky local intent",
+                });
             }
 
             try

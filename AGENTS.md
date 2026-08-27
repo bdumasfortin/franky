@@ -17,9 +17,14 @@ existing conversation and allowlisted-command path, with structured action
 outcomes and an honest demo/no-tools fallback. Local Ollama with `qwen3.5:4b`
 is the selected conversation provider, with the OpenAI adapter retained for a
 future cloud switch. Live Ollama tool selection is verified through the
-loopback endpoint; the physical spoken-command path still needs verification. Authenticated
-Wi-Fi/WebSocket transport, on-board named SFX playback, and spoken responses
-remain planned. Franky does not depend on the official Home Assistant platform.
+loopback endpoint; the physical spoken-command path still needs verification.
+The first on-board named SFX action is implemented, built, and flashed. A direct
+serial request returned its start/completion acknowledgements. Common “How is
+it going?” variants route locally before the conversation model so playback is
+deterministic; the browser still requires board acknowledgement before showing
+success. The complete physical voice path needs user observation.
+Authenticated Wi-Fi/WebSocket transport and generated spoken responses remain
+planned. Franky does not depend on the official Home Assistant platform.
 
 ## Working rules
 

@@ -8,6 +8,15 @@ strictly allowlisted tool loop as the text console. It returns action outcomes
 separately from assistant prose so the UI does not confuse a generated claim
 with a command result.
 
+The control-board host also exposes a fixed device-action tool. It accepts only
+`device.sfx.frankys_suuuper`; the browser translates that semantic action to a
+fixed serial command and waits for the ESP32 acknowledgement. The model never
+supplies arbitrary serial text.
+
+Common short variants of “How is it going?” are recognized locally before the
+conversation provider. This makes Franky's signature response deterministic
+without hijacking longer questions such as “How is it going with the build?”
+
 [ADR-0001](../docs/adr/0001-runtime-and-home-automation-boundary.md) accepts a standalone custom assistant. [ADR-0003](../docs/adr/0003-use-dotnet-modular-monolith.md) selects a .NET 10 modular monolith with explicit internal boundaries for conversation, capabilities, device transport, and diagnostics.
 
 ## Run
