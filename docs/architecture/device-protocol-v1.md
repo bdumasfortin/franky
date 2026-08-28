@@ -72,11 +72,50 @@ after each `READY` line:
 ```text
 READY FRANKY_DEVICE 5 16000 2 16 30.0
 WAKE_ENGINE microwakeword yo_franky
+CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample
+WAKE_THRESHOLD 96
+WAKE_DIAGNOSTICS OFF
 ```
 
 Fallback firmware reports `WAKE_ENGINE wakenet9 hi_esp`. A detection uses the
 same phrase identifier, for example `WAKE yo_franky`. The browser must render
 the reported engine and phrase rather than assuming one.
+
+The custom-model diagnostic build accepts two additive version 5 commands:
+
+```text
+WAKE_THRESHOLD <50-to-99>
+WAKE_DIAGNOSTICS ON
+WAKE_DIAGNOSTICS OFF
+```
+
+Threshold changes are percentages, remain in memory only, and reset to 96% on
+reboot. Unsupported values and fallback firmware fail explicitly. When enabled,
+diagnostics report only smoothed model scores and do not transmit audio:
+
+```text
+WAKE_SCORE <peak_percent> <threshold_percent> detected
+WAKE_SCORE <peak_percent> <threshold_percent> near_miss
+```
+
+The browser enables these controls only when both corresponding capabilities
+are advertised. This diagnostic extension does not reserve protocol version 6,
+which remains proposed for response audio.
+
+The same custom-model build accepts an explicitly initiated, bounded diagnostic
+sample request:
+
+```text
+WAKE_SAMPLE <500-to-5000-ms>
+```
+
+The board disarms wake detection without stopping the ESP-SR Audio Front End,
+reports `WAKE_SAMPLE_START <duration_ms>`, and returns one existing `AUDIO`
+binary body containing the exact post-AFE mono stream supplied to custom-model
+inference. It restores the wake engine after the body and `END` marker. The
+control board currently requests three seconds and never persists the returned
+audio without a separate user acceptance action. This additive diagnostic uses
+version 5 framing; version 6 remains reserved for host-to-device response audio.
 
 ## USB named SFX extension
 
@@ -91,6 +130,19 @@ The board responds with `SFX_START frankys_suuuper`, enters the semantic
 `SFX_DONE frankys_suuuper` only after the codec write completes. Unsupported
 names return `ERROR unknown_sfx`. The browser uses a bounded acknowledgement
 timeout and treats disconnects and firmware errors as failures.
+
+## Generated response audio
+
+Generated response playback is not implemented. The proposed USB version 6
+framing, acknowledgements, bounds, cancellation behavior, activity ownership,
+alternatives, and unresolved recovery proof are documented separately in the
+[USB response-audio proposal](response-audio-usb-v6-proposal.md). It must receive
+explicit architecture approval before firmware and host implementation.
+
+The stable semantic lifecycle should be shared by USB and the future network
+transport: proposed, ready, transferred, started, completed, cancelled, or
+failed. USB byte framing is a development transport detail and does not amend
+the accepted WebSocket text/binary framing from ADR-0004.
 
 ## Assistant state
 

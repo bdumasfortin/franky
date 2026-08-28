@@ -52,8 +52,23 @@ The model-enabled firmware and the model-absent WakeNet fallback both compile
 with ESP-IDF 5.5.2. The custom image has booted on the physical board, reported
 `WAKE_ENGINE microwakeword yo_franky`, and remained idle without watchdog
 faults. The user then confirmed that spoken “Yo Franky” detection worked very
-nicely on the physical board. Longer-term false-activation and miss behavior is
-not yet measured.
+nicely in an initial physical check. A broader quiet-room test at roughly 20
+inches later found that detection sometimes required about ten repetitions.
+The synthetic false-rejection result therefore does not represent the current
+user/room experience. A later 96% versus 87% physical comparison produced about
+three detections per ten attempts at both cutoffs, with reported positive peaks
+ranging from 49% to 99% and several attempts producing no completed score. The
+model/input mismatch requires representative physical positives; a lower cutoff
+alone is not an acceptable production fix.
+
+The first private post-AFE corpus is now complete: 30 positive “Yo Franky”
+samples and 20 hard negatives, all captured through the guided control-board
+workflow. Offline evaluation of the deployed model detected 25/30 positives and
+activated on 5/20 hard negatives at 96%. Across tested cutoffs from 50–99%, the
+best positive count was 28/30 while hard-negative activations never fell below
+4/20. Five similar negatives scored 97–100%. This overlap confirms that no
+tested threshold is an acceptable fix. The absolute scores remain provisional
+until one or more shared samples establish Python-versus-board parity.
 
 ## Tuning loop
 
@@ -61,3 +76,22 @@ The first on-board threshold is intentionally conservative. Improve the model
 with recordings from the actual room and hard negatives discovered during use,
 then retrain and export. Keep real recordings and generated artifacts out of
 Git.
+
+The control board's **Dataset** area now implements that collection step. It
+uses a deliberate three-second firmware diagnostic capture of the same
+post-ESP-SR-AFE mono stream passed to the wake model. Samples remain in browser
+memory until explicitly kept, then are stored below the ignored
+`.cache/recordings/{positive,hard-negative}` directories with JSON sidecars.
+They are not automatically mixed into synthetic training data.
+
+Evaluate the deployed model before retraining:
+
+```powershell
+.\.venv\Scripts\python.exe .\evaluate_recordings.py
+```
+
+The evaluator reproduces the three-frame inference stride and five-score
+integer moving average used by firmware. Its private report is written to
+`.cache/evaluation/latest.json`. The complete first physical corpus has exercised
+the path; the report remains private with the recordings. See the
+[collection and evaluation guide](../../docs/development/wake-word-data-collection.md).

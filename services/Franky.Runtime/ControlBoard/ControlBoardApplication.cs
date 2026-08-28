@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Franky.Runtime.Configuration;
 using Franky.Runtime.Conversation;
@@ -31,7 +33,11 @@ public static class ControlBoardApplication
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
         var options = AssistantOptions.FromEnvironment(arguments);
+        var wakeDatasetRoot = Path.GetFullPath(
+            ReadStringArgument(arguments, "--wake-dataset-root") ??
+            Path.Combine(webRoot, "..", "wake-word", ".cache", "recordings"));
         var events = new JsonEventSink(Console.Error);
+        var wakeDatasetMutationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
         var commandTool = new NamedCommandTool(new ProcessCommandRunner());
         var deviceActionTool = new DeviceActionTool();
         var toolExecutor = new CompositeToolExecutor(commandTool, deviceActionTool);
@@ -42,6 +48,7 @@ public static class ControlBoardApplication
         builder.Services.AddSingleton(conversationClient);
         builder.Services.AddSingleton<AssistantTurnCoordinator>();
         builder.Services.AddSingleton<ISpeechTranscriber, WhisperNetSpeechTranscriber>();
+        builder.Services.AddSingleton(new WakeDatasetStore(wakeDatasetRoot));
 
         var app = builder.Build();
         var fileProvider = new PhysicalFileProvider(Path.GetFullPath(webRoot));
@@ -60,6 +67,101 @@ public static class ControlBoardApplication
                 toolSelectionEnabled = assistantOptions.Provider != AssistantProvider.Demo,
                 local = assistantOptions.IsLocal,
             }));
+
+        app.MapGet("/api/wake-dataset", async (
+            WakeDatasetStore store,
+            CancellationToken requestCancellation) =>
+            Results.Ok(new
+            {
+                status = await store.GetStatusAsync(requestCancellation),
+                mutationToken = wakeDatasetMutationToken,
+            }));
+
+        app.MapPost("/api/wake-dataset/samples", async (
+            HttpRequest request,
+            WakeDatasetStore store,
+            IEventSink events,
+            CancellationToken requestCancellation) =>
+        {
+            if (!HasMutationToken(request, wakeDatasetMutationToken)) return Results.Unauthorized();
+            var mediaType = request.ContentType?.Split(';', 2)[0].Trim();
+            if (!string.Equals(mediaType, "audio/wav", StringComparison.OrdinalIgnoreCase))
+            {
+                return Results.Problem(
+                    "Franky expects a WAV wake sample.",
+                    statusCode: StatusCodes.Status415UnsupportedMediaType);
+            }
+            if (!request.ContentLength.HasValue ||
+                request.ContentLength.Value is <= 0 or > WakeDatasetStore.MaxAudioBytes)
+            {
+                return Results.Problem(
+                    "The wake sample is empty or too large.",
+                    statusCode: StatusCodes.Status413PayloadTooLarge);
+            }
+
+            try
+            {
+                var gainDb = int.TryParse(request.Query["gainDb"], out var parsedGain)
+                    ? parsedGain
+                    : 30;
+                var sample = await store.SaveAsync(
+                    request.Query["category"].ToString(),
+                    request.Body,
+                    new WakeDatasetSampleDetails(
+                        request.Query["promptId"],
+                        request.Query["prompt"],
+                        request.Query["distance"],
+                        request.Query["orientation"],
+                        gainDb),
+                    requestCancellation);
+                events.Write("wake_dataset.sample_saved", new Dictionary<string, object?>
+                {
+                    ["category"] = sample.Category,
+                    ["audio_bytes"] = sample.AudioBytes,
+                    ["duration_ms"] = sample.DurationMilliseconds,
+                });
+                return Results.Created($"/api/wake-dataset/samples/{sample.Id}/audio", sample);
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidDataException exception)
+            {
+                return Results.Problem(exception.Message, statusCode: StatusCodes.Status400BadRequest);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Problem(exception.Message, statusCode: StatusCodes.Status409Conflict);
+            }
+        });
+
+        app.MapDelete("/api/wake-dataset/samples/{id}", async (
+            string id,
+            HttpRequest request,
+            WakeDatasetStore store,
+            CancellationToken requestCancellation) =>
+        {
+            if (!HasMutationToken(request, wakeDatasetMutationToken)) return Results.Unauthorized();
+            return await store.DeleteAsync(id, requestCancellation)
+                ? Results.NoContent()
+                : Results.NotFound();
+        });
+
+        app.MapDelete("/api/wake-dataset", async (
+            HttpRequest request,
+            WakeDatasetStore store,
+            IEventSink events,
+            CancellationToken requestCancellation) =>
+        {
+            if (!HasMutationToken(request, wakeDatasetMutationToken)) return Results.Unauthorized();
+            var deleted = await store.DeleteAllAsync(requestCancellation);
+            events.Write("wake_dataset.deleted", new Dictionary<string, object?>
+            {
+                ["sample_count"] = deleted,
+            });
+            return Results.Ok(new { deleted });
+        });
 
         app.MapPost("/api/assistant/turns", async (
             AssistantTurnRequest request,
@@ -280,6 +382,13 @@ public static class ControlBoardApplication
         int.TryParse(ReadStringArgument(arguments, name), out var parsed) && parsed is > 0 and <= 65535
             ? parsed
             : fallback;
+
+    private static bool HasMutationToken(HttpRequest request, string expected) =>
+        request.Headers.TryGetValue("X-Franky-Control-Token", out var supplied) &&
+        supplied.Count == 1 &&
+        CryptographicOperations.FixedTimeEquals(
+            Encoding.ASCII.GetBytes(supplied.ToString()),
+            Encoding.ASCII.GetBytes(expected));
 }
 
 public sealed record AssistantTurnRequest(string? Text);

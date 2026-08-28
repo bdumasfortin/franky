@@ -46,7 +46,10 @@ generation.
   reporting are locally covered for the OpenAI and Ollama request shapes.
 - Live `qwen3.5:4b` selected and executed both read-only diagnostics through the
   loopback endpoint. Background model preloading avoids the observed cold-load
-  penalty; the physical spoken path remains unverified.
+  penalty. Both diagnostics later answered correctly after successful physical
+  wakes. Across the four non-empty physical requests, runtime logs recorded
+  164–439 ms local transcription and 4–1,046 ms assistant-turn processing;
+  end-to-end wake latency remains unmeasured.
 - A cleaned, metadata-free 16 kHz mono “SUUUPER” asset is embedded in firmware.
 - `SFX frankys_suuuper` has explicit start/completion acknowledgements, and the
   browser maps only the fixed `device.sfx.frankys_suuuper` action to it.
@@ -57,29 +60,54 @@ generation.
   `SFX_DONE`, and live `qwen3.5:4b` selected the exact device action for “How is
   it going?” A physical “How's it going?” test then returned text with no action,
   so common short variants now route through a narrow deterministic matcher
-  before the model. Audible playback through the corrected browser path still
-  requires user observation.
+  before the model. A later physical voice-path check confirmed correct positive
+  diagnostic results, correct negative-control behavior, audible “SUUUPER”
+  playback, low perceived latency, and truthful status after successful wakes.
+  The same check found the custom wake phrase extremely unreliable, sometimes
+  requiring about ten repetitions at roughly 20 inches in a quiet room.
 
 ## Active vertical slice
 
-Prove the implemented bridge and first device action on the physical voice path:
+Improve wake reliability, then repeat the implemented bridge and device-action
+evidence pass:
 
-1. Run both read-only diagnostic requests through the physical wake path and
-   record observed latency while Whisper and Ollama share the GPU.
-2. Confirm the direct `SFX frankys_suuuper` playback was audible; its firmware
-   start and completion acknowledgements are already verified.
-3. Say “Yo Franky”, then “How is it going?”, and verify the already-tested local model selects
-   the fixed action and the UI reports success only after playback.
-4. Keep wake audio and transcripts ephemeral unless persistence is explicitly designed later.
+1. Tune or retrain “Yo Franky” from physical evidence rather than accepting the
+   synthetic evaluation as representative. A temporary 50–99% cutoff and
+   metadata-only peak-score diagnostic are now built, flashed, and verified at
+   the USB command level. A physical 96% versus 87% comparison produced roughly
+   three detections per ten attempts at both cutoffs, so threshold reduction
+   alone is rejected as the fix. A private, explicit record/review/keep
+   collector for the model's exact post-AFE input is now built and flashed,
+   with an offline current-model evaluator. The first 30-positive/20-hard-
+   negative corpus is complete. At 96%, offline scoring detected 25 positives
+   and activated on five hard negatives; from 50–99%, no tested cutoff produced
+   useful class separation. Verify board/evaluator score parity on shared
+   samples, then train a candidate without consuming the final physical
+   acceptance set as training evidence.
+2. Measure repeated wakes at a fixed distance and quiet-room condition, then
+   observe an idle period for false activations.
+3. Repeat both read-only diagnostics, “How is it going?”, and the longer
+   negative control after wake tuning; the downstream behavior passed in the
+   latest test but the entry path did not.
+4. Record stage latency rather than relying only on the current “very low”
+   subjective observation.
+5. Keep ordinary wake audio and transcripts ephemeral. The separately approved
+   wake-dataset workflow persists only deliberately recorded and explicitly
+   accepted samples in ignored local storage, with individual and whole-set
+   deletion.
 
 ## Following increments
 
-1. Add text-to-speech behind a replaceable provider boundary.
-2. Stream or send the generated response to the board speaker.
-3. Extend the draft protocol for wake-triggered utterances and named playback.
-4. Implement authenticated Wi-Fi/WebSocket transport and reconnect behavior.
-5. Tune the custom “Yo Franky” model with real-room positives or hard negatives
-   only if ordinary use exposes misses or false activations.
+The detailed, approved order is maintained in the
+[spoken-loop roadmap](spoken-loop-roadmap.md). In summary: finish the physical
+evidence pass; add a replaceable local TTS boundary and approve a voice; define
+acknowledged, cancellable response audio; play replies over USB; add semantic
+earcons and universal stop; improve conversational delivery; then move device
+ownership into the runtime and complete authenticated, headless operation.
+
+Implementation stops before shared lists and media integrations. A separate
+passive-display track is mocked against a read-only event contract and does not
+own device or assistant actions.
 
 ## Validation gates
 

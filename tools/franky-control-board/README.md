@@ -15,6 +15,22 @@ until speech ends, sends a bounded mono utterance to the computer, and local
 Whisper transcription appears in the Wake area and terminal. Manual raw-stereo
 recording remains available between wake detections.
 
+The current diagnostic firmware advertises temporary wake-threshold and
+near-miss-score capabilities. In the Wake area, **Show near misses** reports the
+highest smoothed model score for a candidate without saving or transferring
+room audio. **Temporary cutoff** changes the custom detector from 50–99% over
+USB and returns to the 96% default after a reboot. These controls are disabled
+for firmware that does not advertise support and for the WakeNet fallback.
+
+The **Dataset** area is the explicit, local-only collection surface for fixing
+the current custom-model miss rate. It captures the exact processed mono stream
+used by the wake model for three seconds, then requires **Keep sample** before
+anything is written. **Discard and retry** writes nothing. Kept WAV files and
+metadata sidecars remain under the ignored
+`tools/wake-word/.cache/recordings` directory; individual and confirmed
+whole-dataset deletion are available. The collector does not transcribe,
+upload, or automatically train on these samples.
+
 After a non-empty wake transcript, the same loopback service now sends the text
 through Franky's conversation provider. Model tool calls remain constrained to
 the fixed named-command allowlist, and the Wake area displays the transcript,
@@ -43,12 +59,25 @@ probabilistic tool choice.
    account are you running as?” Ask “How is it going?” to request the embedded
    Franky clip. Use the Audio area for manual recordings.
 
+For sensitivity diagnosis, open **Wake**, enable **Show near misses**, and leave
+the cutoff at 96% for the first set of attempts. Record every reported peak,
+including successful detections. Then compare the same phrase, position, and
+speaking style at 87%. Lower thresholds may increase false activations; they are
+temporary evaluation settings, not accepted production tuning.
+
 Manual clips remain in browser memory unless downloaded. Wake clips are
 discarded after transcription and transcript text is not persisted. Audio stays
 local. The default Ollama conversation also stays on this computer. When the
 optional OpenAI provider is enabled, transcript text and conversation responses
 cross the cloud boundary described in the
 [OpenAI development notes](../../docs/development/openai-api.md).
+
+The first approved wake corpus of 30 positives and 20 hard negatives has been
+collected through the guided prompts and evaluated locally. At the current 96%
+cutoff, the deployed model detected 25 positives and activated on five hard
+negatives; no tested 50–99% cutoff separated the classes. The separate
+[wake-word collection guide](../../docs/development/wake-word-data-collection.md)
+documents privacy, the complete score table, and the retraining gate.
 
 Switch modes explicitly when needed:
 

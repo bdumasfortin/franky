@@ -6,30 +6,46 @@ Franky is a personal, from-scratch voice assistant built around a
 [Waveshare ESP32-S3-AUDIO-Board](https://www.waveshare.com/esp32-s3-audio-board.htm)
 and a custom .NET runtime on the computer. The board handles room audio, the
 wake word, speaker cues, and status LEDs; the computer handles local speech
-recognition and will grow into conversation and home-control features.
+recognition, conversation, and safe command execution.
 
 > **Current state:** the USB development path works end to end from a wake
 > phrase to a local transcript. A custom **“Yo Franky”** model is now trained,
-> flashed, and successfully recognized in its first physical-room test. Longer
-> use will reveal whether its sensitivity needs tuning.
+> flashed, and able to trigger, but a broader physical check found unacceptable
+> sensitivity: it sometimes required roughly ten repetitions at 20 inches in a
+> quiet room. Wake tuning is now the active physical blocker.
+> A diagnostic firmware build with temporary sensitivity control and
+> metadata-only near-miss scores is flashed. A 96% versus 87% comparison yielded
+> roughly three detections per ten attempts at both settings, so representative
+> physical samples and model tuning are needed rather than a lower cutoff alone.
+> A private guided Dataset workflow is now built and flashed: it captures the
+> exact processed signal used by the wake model, requires review and explicit
+> acceptance before local storage, and includes an offline evaluator. The first
+> 30-positive/20-hard-negative spoken corpus is complete. Offline scoring at the
+> current 96% cutoff detected 25/30 positives but also activated on 5/20 hard
+> negatives; no tested cutoff from 50–99% separated the two classes. Board versus
+> evaluator score parity is the next evidence gate before a retrained candidate.
 > The control board now hands completed transcripts to Franky's conversation
 > and allowlisted-command path. Ollama with `qwen3.5:4b` is the selected local
 > provider, while OpenAI remains an optional cloud adapter. The HTTP bridge and
 > both provider tool loops are locally tested, and live Ollama selected both
-> read-only diagnostics correctly through the loopback endpoint. The full
-> physical spoken-command path still needs observation. The first named device
+> read-only diagnostics correctly through the loopback endpoint. After
+> successful physical wakes, both diagnostics answered correctly and the
+> longer negative control behaved as expected. The first named device
 > action is implemented and flashed: asking Franky how it is going requests an
 > embedded “SUUUPER” clip and waits for the board to acknowledge completion.
-> Direct serial start/completion and live Ollama intent selection are verified;
-> audible playback and the complete spoken path await user observation. Wi-Fi
-> transport and generated spoken answers remain ahead.
+> Direct serial start/completion, live Ollama intent selection, and audible
+> physical playback are verified with truthful status. Wi-Fi
+> transport and generated spoken answers remain ahead. A provider-neutral,
+> cancellable local TTS boundary is implemented and tested, but no engine or
+> Franky voice has been selected and no generated audio reaches the board yet.
 
 ## What works today
 
 - Far-field stereo microphone capture from close range to roughly 12 feet.
 - On-device wake detection: the previously verified **“Hi ESP”** WakeNet path
   remains a fallback, while the custom **“Yo Franky”** microWakeWord path is
-  installed and verified by a successful spoken test on the physical board.
+  installed and able to trigger on the physical board but currently has an
+  unacceptable miss rate.
 - Natural utterance capture that stops after trailing silence.
 - Local speech-to-text with Whisper `small.en`, accelerated by an NVIDIA GPU
   when CUDA is available and backed by a CPU fallback.
@@ -37,6 +53,8 @@ recognition and will grow into conversation and home-control features.
   an embedded named “SUUUPER” clip.
 - A seven-pixel status ring with state colors and an offline breathing animation.
 - A local browser control board for audio, LED, wake-word, and device testing.
+- A deliberate local-only wake-dataset collector with review-before-save,
+  deletion controls, ignored storage, and current-model offline evaluation.
 - A .NET conversation pipeline with local Ollama, deterministic demo, optional
   OpenAI providers, and strictly allowlisted read-only commands.
 - A loopback assistant-turn endpoint that connects wake transcripts to that
@@ -46,6 +64,9 @@ recognition and will grow into conversation and home-control features.
   after the ESP32 finishes playback.
 - A local exact-intent router for common forms such as “How's it going?” so this
   signature response does not depend on probabilistic model tool selection.
+- A provider-neutral speech-synthesis contract with bounded board-compatible
+  PCM output, single-flight execution, cooperative cancellation, and
+  metadata-only diagnostics; production synthesis and playback remain pending.
 
 ## How it fits together
 
@@ -83,6 +104,12 @@ continues through Franky's conversation provider and may invoke one of the two
 fixed read-only diagnostics without a cloud key. Use `-AssistantProvider demo`
 for the deterministic **Demo · no tools** mode or `-AssistantProvider openai`
 after configuring a separate OpenAI Platform key.
+
+To work on wake reliability, open **Dataset**. The first set of 30 positive “Yo
+Franky” samples and 20 hard negatives has been collected and evaluated. Each
+recording stays in memory until **Keep sample** is pressed, and accepted files
+remain only below the ignored local wake-word cache. See the
+[collection guide](docs/development/wake-word-data-collection.md).
 
 The first run downloads the Whisper `small.en` model to
 `%LOCALAPPDATA%\Franky\models`. Wake audio remains local and is discarded after
@@ -127,7 +154,9 @@ not an application credential. Setup and privacy details live in the
 | [`docs/`](docs/) | Product, architecture, development, and decision documentation |
 
 Start with the [documentation index](docs/README.md) for the project’s current
-direction and the distinction between working features and planned ones.
+direction and the distinction between working features and planned ones. The
+[spoken-loop roadmap](docs/plan/spoken-loop-roadmap.md) records the approved
+seven-step implementation sequence and its decision gates.
 
 ## Privacy and safety
 

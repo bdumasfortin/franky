@@ -19,6 +19,13 @@ var tests = new (string Name, Func<Task> Run)[]
     (nameof(OllamaConversationClientTests.ExecutesToolAndReturnsToolOutputToModel), OllamaConversationClientTests.ExecutesToolAndReturnsToolOutputToModel),
     (nameof(PcmWaveValidatorTests.AcceptsFrankyMonoPcm), PcmWaveValidatorTests.AcceptsFrankyMonoPcm),
     (nameof(PcmWaveValidatorTests.RejectsStereoWakeAudio), PcmWaveValidatorTests.RejectsStereoWakeAudio),
+    (nameof(WakeDatasetStoreTests.SavesListsAndDeletesLocalSamples), WakeDatasetStoreTests.SavesListsAndDeletesLocalSamples),
+    (nameof(WakeDatasetStoreTests.RejectsInvalidCategoryAndStereoAudio), WakeDatasetStoreTests.RejectsInvalidCategoryAndStereoAudio),
+    (nameof(SpeechSynthesisCoordinatorTests.AcceptsBoundedFrankyPcm), SpeechSynthesisCoordinatorTests.AcceptsBoundedFrankyPcm),
+    (nameof(SpeechSynthesisCoordinatorTests.RejectsUnsupportedAudioFormat), SpeechSynthesisCoordinatorTests.RejectsUnsupportedAudioFormat),
+    (nameof(SpeechSynthesisCoordinatorTests.RejectsOversizedOrPartialAudio), SpeechSynthesisCoordinatorTests.RejectsOversizedOrPartialAudio),
+    (nameof(SpeechSynthesisCoordinatorTests.RejectsOverlappingSynthesis), SpeechSynthesisCoordinatorTests.RejectsOverlappingSynthesis),
+    (nameof(SpeechSynthesisCoordinatorTests.CancelsActiveSynthesis), SpeechSynthesisCoordinatorTests.CancelsActiveSynthesis),
 };
 
 var failures = new List<string>();

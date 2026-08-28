@@ -33,6 +33,37 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
   15 seconds without a watchdog event.
 - The user then spoke **“Yo Franky”** to the physical board and reported that
   detection worked very nicely through the existing cue, capture, and control-board flow.
+- A broader physical voice-path check on 2026-08-27 exposed poor repeatability:
+  at roughly 20 inches in a very quiet room, “Yo Franky” sometimes required
+  about ten repetitions. This supersedes the initial anecdotal success as the
+  current sensitivity evidence. When detection succeeded, the user observed
+  correct transcripts, correct positive diagnostic results, the expected
+  negative-control behavior, audible “SUUUPER” playback, very low perceived
+  latency, and no duplicate action, timeout, or misleading status.
+- A follow-up diagnostic image was built and flashed on 2026-08-27. Direct USB
+  checks verified `wake_threshold` and `wake_diagnostics` capability reporting,
+  the 96% reboot default, a temporary change to 87%, diagnostic enable/disable,
+  rejection of a 49% request, and restoration to 96%. No audio is logged by
+  this mode. Detection-rate and false-activation effects remain physically
+  unverified at that point.
+- The subsequent fixed-position spoken comparison produced three detections at
+  96% from eleven submitted entries (or ten if one entry was duplicated) and
+  three detections from ten attempts at 87%. Reported genuine-phrase peaks
+  ranged from 49% to 99%, with several attempts below the reporting floor or
+  without a completed diagnostic candidate. This physical evidence shows that
+  lowering the cutoff alone does not resolve the miss rate.
+- A later private-dataset image added the bounded `WAKE_SAMPLE` diagnostic. It
+  built, flashed, advertised `wake_sample`, and returned exactly 32,000 bytes
+  for a direct one-second request. The payload was 16 kHz, 16-bit mono from the
+  same post-AFE stream consumed by custom inference. The 1,159,296-byte image
+  has SHA-256
+  `82E9CCA086F940FAFC86536B1ACC0CC4E6E0EB0AF59A81F5C0A1EDF82731EAD9`.
+  The user subsequently kept the full guided 30-positive/20-hard-negative
+  corpus through the browser workflow. All 50 local WAV/metadata pairs passed
+  integrity checks. Offline model scoring at the current 96% cutoff detected
+  25/30 positives and activated on 5/20 hard negatives; no tested 50–99%
+  threshold separated the classes. Exact board-versus-evaluator score parity
+  remains unverified.
 - After wake detection, the ESP-SR Audio Front End captured speech until trailing silence and delivered bounded mono audio for local Whisper transcription.
 - Connection, disconnection, and wake acknowledgement cues were heard through the ES8311 speaker path.
 - On 2026-08-27 all cues became silent even though wake detection and the
@@ -50,7 +81,12 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
   and raises only the named clip to the codec maximum of 100, pending a
   listening check.
 
-These observations verify the USB data path, MCU identification, memory capacities, factory-firmware boot, stereo microphone capture, local wake detection, voice-activity endpointing, state LEDs, speaker cues, and the complete wake-to-transcript development path. They do not verify the planned Wi-Fi transport or full spoken-response playback.
+These observations verify the USB data path, MCU identification, memory
+capacities, factory-firmware boot, stereo microphone capture, the existence of
+local wake detection, voice-activity endpointing, state LEDs, speaker cues, and
+the downstream wake-to-action development path after a successful detection.
+They do not establish acceptable “Yo Franky” wake reliability, the planned
+Wi-Fi transport, or generated spoken-response playback.
 
 ## Factory backup
 
@@ -77,4 +113,5 @@ ESP-IDF 5.5.2 was prepared in response to the bring-up review choice. It is an e
 - Battery or external-power behavior.
 - Wi-Fi connectivity.
 - Restoration of the factory backup after custom firmware use.
-- Longer-term “Yo Franky” miss rate and false-activation behavior in ordinary use.
+- Acceptable “Yo Franky” miss rate and false-activation behavior; the latest
+  quiet-room test showed an unacceptable miss rate even at roughly 20 inches.

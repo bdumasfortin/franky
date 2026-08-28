@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Franky</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20260827-dataset1">
 </head>
 <body>
   <main id="appRoot" class="app-frame" data-state="offline" data-connected="false">
@@ -41,6 +41,7 @@
             <button class="feature-tab active" type="button" data-feature="audio">Audio</button>
             <button class="feature-tab" type="button" data-feature="leds">LEDs</button>
             <button class="feature-tab" type="button" data-feature="wake">Wake</button>
+            <button class="feature-tab" type="button" data-feature="dataset">Dataset</button>
             <button class="feature-tab" type="button" data-feature="device">Device</button>
           </nav>
 
@@ -127,7 +128,85 @@
                 <p id="lastReply">No request processed in this session.</p>
                 <small id="assistantMeta">Named capabilities · fixed allowlist</small>
               </div>
+              <div class="wake-tuning">
+                <label>Temporary cutoff
+                  <select id="wakeThresholdSelect" disabled>
+                    <option value="96" selected>96% · current default</option>
+                    <option value="92">92%</option>
+                    <option value="87">87% · first comparison</option>
+                    <option value="80">80%</option>
+                    <option value="70">70%</option>
+                    <option value="60">60%</option>
+                    <option value="50">50% · most sensitive</option>
+                  </select>
+                </label>
+                <button id="wakeDiagnosticsButton" class="secondary-action" type="button" disabled>Show near misses</button>
+                <span class="action-status"><strong id="wakeScoreReadout">Diagnostics off</strong><small id="wakeThresholdDetail">Temporary until reboot</small></span>
+              </div>
               <div class="feature-note"><strong id="wakeCaptureMode">Natural endpointing enabled</strong><span>Franky stops listening after trailing silence, with a 20-second safety cap.</span></div>
+            </div>
+
+            <div class="feature-panel dataset-panel" data-feature-panel="dataset">
+              <div class="privacy-card">
+                <strong>Private wake-word collection</strong>
+                <p>Franky records only after you press the capture button. A sample stays in memory until you review and keep it. Kept samples remain on this computer and are ignored by Git.</p>
+              </div>
+
+              <div class="dataset-progress" aria-label="Wake dataset progress">
+                <div><span>Positive samples</span><strong id="positiveProgress">0 / 30</strong><i><b id="positiveProgressBar"></b></i></div>
+                <div><span>Hard negatives</span><strong id="negativeProgress">0 / 20</strong><i><b id="negativeProgressBar"></b></i></div>
+              </div>
+
+              <div class="compact-fields dataset-fields">
+                <label>Sample type
+                  <select id="datasetCategory">
+                    <option value="positive">Positive · “Yo Franky”</option>
+                    <option value="hard-negative">Hard negative</option>
+                  </select>
+                </label>
+                <label>Distance
+                  <select id="datasetDistance">
+                    <option value="20 inches" selected>20 inches</option>
+                    <option value="near · 10 inches">Near · 10 inches</option>
+                    <option value="room · 4 feet">Room · 4 feet</option>
+                    <option value="far · 8 feet">Far · 8 feet</option>
+                  </select>
+                </label>
+                <label>Orientation
+                  <select id="datasetOrientation">
+                    <option value="facing" selected>Facing Franky</option>
+                    <option value="slight-left">Slightly left</option>
+                    <option value="slight-right">Slightly right</option>
+                    <option value="side">Side-on</option>
+                  </select>
+                </label>
+              </div>
+
+              <div class="dataset-prompt">
+                <span id="datasetPromptStep">Positive sample 1</span>
+                <strong id="datasetPromptText">“Yo Franky”</strong>
+                <p id="datasetPromptInstruction">Use your ordinary speaking voice.</p>
+              </div>
+
+              <div class="action-row dataset-action-row">
+                <button id="datasetCaptureButton" class="primary-action" type="button" disabled>Record 3-second sample</button>
+                <span class="action-status"><strong id="datasetCaptureStatus">Connect Franky</strong><small id="datasetCaptureDetail">Exact wake-model input · nothing saved automatically</small></span>
+              </div>
+
+              <div id="datasetReview" class="dataset-review" hidden>
+                <span>Review before keeping</span>
+                <audio id="datasetReviewAudio" controls preload="metadata"></audio>
+                <div class="dataset-review-actions">
+                  <button id="datasetKeepButton" class="primary-action" type="button">Keep sample</button>
+                  <button id="datasetRetryButton" class="secondary-action" type="button">Discard and retry</button>
+                </div>
+                <small id="datasetReviewMeta"></small>
+              </div>
+
+              <div class="subhead"><span>Saved locally</span><button id="datasetDeleteAllButton" type="button" disabled>Delete all</button></div>
+              <div id="datasetEmptyState" class="recordings-empty">No wake-word samples have been kept.</div>
+              <div id="datasetSamples" class="dataset-samples"></div>
+              <div class="feature-note"><strong>Collection only</strong><span>Samples are saved for review. They are not added to training or uploaded anywhere.</span></div>
             </div>
 
             <div class="feature-panel" data-feature-panel="device">
@@ -173,6 +252,6 @@
     </article>
   </template>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=20260827-dataset1"></script>
 </body>
 </html>

@@ -13,6 +13,10 @@ The board's USB, factory-boot, microphone, speaker, LED, wake-word, and voice-ac
   model artifact is present, with **“Hi ESP”** WakeNet9 as the clean-build and
   initialization fallback;
 - uses the ESP-SR Audio Front End to stop wake capture after trailing silence;
+- exposes bounded, temporary 50–99% custom wake cutoffs and optional near-miss
+  score diagnostics over USB without transmitting or storing room audio;
+- exposes a deliberate 0.5–5 second diagnostic capture of the exact processed
+  mono stream used by custom wake inference, for private local dataset work;
 - explicitly enables the NS4150B speaker amplifier through TCA9555 expander
   pin 8 on every boot, then plays connection, disconnection, and wake
   acknowledgement cues;
@@ -29,13 +33,17 @@ The computer receives the bounded wake utterance and transcribes it locally. Wi-
 The previous model-enabled image has been built, flashed, booted, and observed
 idle on the physical board without watchdog faults. The board reports
 `WAKE_ENGINE microwakeword yo_franky`, and the user confirmed successful spoken
-detection in the physical room. Longer-term miss and false-activation behavior
-remains a tuning concern rather than a completed measurement.
+detection in the physical room. A later quiet-room check at roughly 20 inches
+found that it sometimes required about ten repetitions. The custom detector's
+miss rate is therefore unacceptable and is now an active tuning problem. A
+diagnostic image implementing temporary cutoff changes and peak-score reporting
+has been built, flashed, and verified through direct USB acknowledgements. Its
+physical detection behavior still requires user observation.
 
 The named-SFX image builds, fits the current application partition, and is
 flashed on the board. A direct command returned both `SFX_START` and `SFX_DONE`;
-audible playback and the full spoken request path are not yet recorded as user
-observations. Asset format and provenance details are in
+the user later heard the clip through the physical wake path and observed no
+duplicate action, timeout, or misleading status. Asset format and provenance details are in
 [`franky-device/main/sfx/README.md`](franky-device/main/sfx/README.md).
 
 ## Toolchain

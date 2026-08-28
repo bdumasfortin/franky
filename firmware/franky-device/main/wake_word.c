@@ -1,6 +1,7 @@
 #include "wake_word.h"
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,6 +26,8 @@
 #define CAPTURE_COMPLETE_BIT BIT1
 #define PAUSE_TIMEOUT_MS 1000
 #define VAD_TRAILING_SILENCE_MS 900
+#define WAKE_DIAGNOSTIC_CANDIDATE_PERCENT 20
+#define WAKE_DIAGNOSTIC_RESET_PERCENT 10
 
 static const char *TAG = "wake_word";
 
@@ -44,9 +47,12 @@ static size_t s_capture_sample_count;
 static size_t s_capture_elapsed_samples;
 static size_t s_capture_start_timeout_samples;
 static bool s_capture_speech_started;
+static bool s_capture_fixed_duration;
 static wake_utterance_end_t s_capture_end_reason;
 static bool s_using_custom_model;
 static bool s_initialized;
+static volatile bool s_diagnostics_enabled;
+static uint8_t s_diagnostic_peak_percent;
 
 static size_t append_capture_samples(const int16_t *samples, size_t sample_count)
 {
@@ -78,6 +84,14 @@ static void process_capture_result(const afe_fetch_result_t *result)
 
     const size_t frame_samples = (size_t)result->data_size / sizeof(int16_t);
     s_capture_elapsed_samples += frame_samples;
+
+    if (s_capture_fixed_duration) {
+        append_capture_samples(result->data, frame_samples);
+        if (s_capture_sample_count >= s_capture_capacity_samples) {
+            complete_capture(WAKE_UTTERANCE_ENDED_BY_FIXED_DURATION);
+        }
+        return;
+    }
 
     if (!s_capture_speech_started) {
         if (result->vad_state != VAD_SPEECH) {
@@ -174,9 +188,32 @@ static bool result_is_wake(const afe_fetch_result_t *result)
 #if FRANKY_HAS_CUSTOM_WAKE_MODEL
     if (s_using_custom_model) {
         if (result->data == NULL || result->data_size <= 0) return false;
-        return franky_wake_model_process(
+        const bool detected = franky_wake_model_process(
             result->data,
             (size_t)result->data_size / sizeof(int16_t));
+        const uint8_t score_percent =
+            franky_wake_model_get_last_score_percent();
+        if (s_diagnostics_enabled) {
+            if (score_percent > s_diagnostic_peak_percent) {
+                s_diagnostic_peak_percent = score_percent;
+            }
+            if (detected) {
+                printf(
+                    "WAKE_SCORE %u %u detected\n",
+                    s_diagnostic_peak_percent,
+                    franky_wake_model_get_threshold_percent());
+                s_diagnostic_peak_percent = 0;
+            } else if (
+                score_percent < WAKE_DIAGNOSTIC_RESET_PERCENT &&
+                s_diagnostic_peak_percent >= WAKE_DIAGNOSTIC_CANDIDATE_PERCENT) {
+                printf(
+                    "WAKE_SCORE %u %u near_miss\n",
+                    s_diagnostic_peak_percent,
+                    franky_wake_model_get_threshold_percent());
+                s_diagnostic_peak_percent = 0;
+            }
+        }
+        return detected;
     }
 #endif
     if (result->raw_data_channels == 1) {
@@ -318,6 +355,48 @@ esp_err_t wake_word_resume(void)
     return ESP_OK;
 }
 
+esp_err_t wake_word_set_threshold_percent(uint8_t threshold_percent)
+{
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+    if (!s_using_custom_model) return ESP_ERR_NOT_SUPPORTED;
+    s_diagnostic_peak_percent = 0;
+    return franky_wake_model_set_threshold_percent(threshold_percent);
+#else
+    (void)threshold_percent;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+uint8_t wake_word_get_threshold_percent(void)
+{
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (s_using_custom_model) {
+        return franky_wake_model_get_threshold_percent();
+    }
+#endif
+    return 0;
+}
+
+esp_err_t wake_word_set_diagnostics(bool enabled)
+{
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+    if (!s_using_custom_model) return ESP_ERR_NOT_SUPPORTED;
+    s_diagnostics_enabled = enabled;
+    s_diagnostic_peak_percent = 0;
+    return ESP_OK;
+#else
+    (void)enabled;
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
+}
+
+bool wake_word_diagnostics_enabled(void)
+{
+    return s_diagnostics_enabled;
+}
+
 const char *wake_word_engine_name(void)
 {
     return s_using_custom_model ? "microwakeword" : "wakenet9";
@@ -360,6 +439,7 @@ esp_err_t wake_word_capture_utterance(
     s_capture_start_timeout_samples =
         ((size_t)FRANKY_SAMPLE_RATE * speech_start_timeout_ms) / 1000;
     s_capture_speech_started = false;
+    s_capture_fixed_duration = false;
     s_capture_end_reason = WAKE_UTTERANCE_NO_SPEECH;
     s_afe->reset_vad(s_afe_data);
     s_afe->enable_vad(s_afe_data);
@@ -392,6 +472,66 @@ esp_err_t wake_word_capture_utterance(
     if (utterance->end_reason == WAKE_UTTERANCE_NO_SPEECH) {
         wake_word_release_utterance(utterance);
     }
+    return ESP_OK;
+}
+
+esp_err_t wake_word_capture_sample(
+    uint32_t duration_ms,
+    wake_utterance_t *utterance)
+{
+    if (!s_initialized || utterance == NULL || s_capture_active ||
+        duration_ms < 500 || duration_ms > 5000) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    memset(utterance, 0, sizeof(*utterance));
+    const size_t capacity_samples =
+        ((size_t)FRANKY_SAMPLE_RATE * duration_ms) / 1000;
+    int16_t *samples = heap_caps_malloc(
+        capacity_samples * sizeof(int16_t),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (samples == NULL) samples = malloc(capacity_samples * sizeof(int16_t));
+    if (samples == NULL) return ESP_ERR_NO_MEM;
+
+    s_wake_armed = false;
+    disarm_wake_engine();
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    if (s_using_custom_model) franky_wake_model_reset();
+#endif
+    xEventGroupClearBits(s_events, CAPTURE_COMPLETE_BIT);
+    s_capture_samples = samples;
+    s_capture_capacity_samples = capacity_samples;
+    s_capture_sample_count = 0;
+    s_capture_elapsed_samples = 0;
+    s_capture_start_timeout_samples = 0;
+    s_capture_speech_started = true;
+    s_capture_fixed_duration = true;
+    s_capture_end_reason = WAKE_UTTERANCE_ENDED_BY_FIXED_DURATION;
+    s_capture_active = true;
+
+    const EventBits_t bits = xEventGroupWaitBits(
+        s_events,
+        CAPTURE_COMPLETE_BIT,
+        pdTRUE,
+        pdTRUE,
+        pdMS_TO_TICKS(duration_ms + 3000));
+
+    if ((bits & CAPTURE_COMPLETE_BIT) == 0) {
+        s_capture_active = false;
+        s_capture_fixed_duration = false;
+        free(samples);
+        s_capture_samples = NULL;
+        return ESP_ERR_TIMEOUT;
+    }
+
+    utterance->samples = samples;
+    utterance->sample_count = s_capture_sample_count;
+    utterance->end_reason = s_capture_end_reason;
+    s_capture_samples = NULL;
+    s_capture_capacity_samples = 0;
+    s_capture_sample_count = 0;
+    s_capture_elapsed_samples = 0;
+    s_capture_fixed_duration = false;
     return ESP_OK;
 }
 

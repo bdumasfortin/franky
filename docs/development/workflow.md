@@ -9,21 +9,27 @@ Stereo capture, WakeNet “Hi ESP” detection, voice-activity endpointing, spea
 cues, and animated status LEDs have all been observed through the USB
 development control board. A locally trained “Yo Franky” microWakeWord image is
 also flashed, has booted stably, and has passed its first physical spoken test.
-Longer-term sensitivity and false-activation behavior should be tuned from
-ordinary use rather than synthetic metrics alone.
+A later quiet-room check at roughly 20 inches found that it sometimes required
+about ten repetitions. Wake sensitivity is therefore unacceptable and must be
+tuned from physical evidence rather than synthetic metrics alone. The first
+private physical corpus is now complete. Offline scoring found overlapping
+positive and hard-negative distributions at every tested cutoff from 50–99%,
+so a threshold change is not a viable fix. Board/evaluator score parity is the
+next wake evidence gate before candidate retraining.
 
 The active gap is no longer basic hardware bring-up or transcript routing. The
 control-board service now feeds each completed wake transcript into the existing
 conversation and safe-command pipeline and returns separate action and reply
 results. This bridge and both real-provider request shapes are locally tested.
 Live Ollama selected and executed both read-only diagnostics through the
-loopback endpoint. The physical wake-to-command path remains unverified. The
-first requested device capability—named “SUUUPER” SFX playback—is implemented
-and flashed with an explicit board completion acknowledgement. The board
-returned both acknowledgements for a direct request, and live Ollama selected
-the action from “How is it going?” Because it missed the contraction “How's it
-going?” in a later physical test, common short variants now route locally before
-the model. The corrected physical voice path remains unverified. Generated spoken responses follow.
+loopback endpoint. After successful physical wakes, both diagnostics answered
+correctly and the longer negative control behaved as expected. The first
+requested device capability—named “SUUUPER” SFX playback—is implemented and
+flashed with an explicit board completion acknowledgement. The board returned
+both acknowledgements for a direct request, and the user later heard it through
+the physical wake path with truthful status. Because an earlier contraction
+variant missed the action, common short variants route locally before the
+model. Generated spoken responses follow.
 Wi-Fi/WebSocket transport remains the intended
 room deployment but is not implemented yet.
 
@@ -59,6 +65,9 @@ Supply local values through process environment variables. Do not place a real A
   over USB. Select `openai` explicitly only when its separate API key is configured.
 - Use `tools/wake-word` to reproduce the ignored local “Yo Franky” model; never
   commit its datasets, recordings, checkpoints, or exported `.tflite` file.
+- Use the control board's Dataset area for approved physical wake samples. It
+  stores only explicitly kept recordings under the ignored wake-word cache;
+  ordinary wake utterances remain ephemeral.
 - Keep Wi-Fi transport changes behind the documented device boundary so the working speech and command paths do not need to be redesigned.
 
 See the [hardware bring-up record](../../firmware/hardware-bring-up.md) for observed evidence and remaining hardware gaps.
@@ -70,7 +79,10 @@ took about 65 seconds. Background startup preloading reduced model preparation
 to about 4.9 seconds; subsequent two-round tool requests completed in roughly
 0.9–1.7 seconds. Both `runtime.dotnet_version` and `system.identity` were
 selected by the live `qwen3.5:4b` model and returned truthful tool outcomes.
-These are loopback service observations, not yet physical spoken-path results.
+The cold/preload timings above are loopback-only observations. During the later
+physical check, runtime logs recorded 164–439 ms local transcription processing
+and 4–1,046 ms assistant-turn processing across four non-empty requests. These
+do not include wake detection, capture, transfer, or user-perceived completion.
 
 ## Validation
 

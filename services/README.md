@@ -1,12 +1,24 @@
 # Franky runtime
 
-[`Franky.Runtime/`](Franky.Runtime/) is the project-owned .NET 10 application that runs on the computer. It contains the replaceable conversation, capability, diagnostics, command, and speech-transcription boundaries, and it serves the local browser control board during USB development.
+[`Franky.Runtime/`](Franky.Runtime/) is the project-owned .NET 10 application that runs on the computer. It contains the replaceable conversation, capability, diagnostics, command, speech-transcription, and speech-synthesis boundaries, and it serves the local browser control board during USB development.
+
+The speech-synthesis boundary currently defines and tests one bounded output
+contract: 16 kHz, 16-bit, mono PCM, with single-flight execution, cooperative
+cancellation, and structured diagnostics that record lengths and outcomes but
+not response text. No production TTS engine or Franky voice is selected yet,
+and generated audio is not wired to the board.
 
 Control-board mode exposes loopback-only transcription and assistant-turn
 endpoints. A completed wake transcript reuses the same conversation session and
 strictly allowlisted tool loop as the text console. It returns action outcomes
 separately from assistant prose so the UI does not confuse a generated claim
 with a command result.
+
+The same loopback host provides the explicitly approved wake-dataset store.
+It accepts only bounded canonical 16 kHz mono PCM WAV samples, requires a
+per-process mutation token, generates every filename itself, and writes only
+below the ignored local wake-word cache. Sample metadata excludes transcripts
+and speaker identity, and the API supports explicit deletion.
 
 The control-board host also exposes a fixed device-action tool. It accepts only
 `device.sfx.frankys_suuuper`; the browser translates that semantic action to a

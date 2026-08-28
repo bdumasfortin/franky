@@ -32,7 +32,32 @@ const els = {
   transcriptMeta: document.querySelector('#transcriptMeta'),
   lastReply: document.querySelector('#lastReply'),
   assistantMeta: document.querySelector('#assistantMeta'),
+  wakeThresholdSelect: document.querySelector('#wakeThresholdSelect'),
+  wakeDiagnosticsButton: document.querySelector('#wakeDiagnosticsButton'),
+  wakeScoreReadout: document.querySelector('#wakeScoreReadout'),
+  wakeThresholdDetail: document.querySelector('#wakeThresholdDetail'),
   wakeCaptureMode: document.querySelector('#wakeCaptureMode'),
+  datasetCategory: document.querySelector('#datasetCategory'),
+  datasetDistance: document.querySelector('#datasetDistance'),
+  datasetOrientation: document.querySelector('#datasetOrientation'),
+  datasetPromptStep: document.querySelector('#datasetPromptStep'),
+  datasetPromptText: document.querySelector('#datasetPromptText'),
+  datasetPromptInstruction: document.querySelector('#datasetPromptInstruction'),
+  datasetCaptureButton: document.querySelector('#datasetCaptureButton'),
+  datasetCaptureStatus: document.querySelector('#datasetCaptureStatus'),
+  datasetCaptureDetail: document.querySelector('#datasetCaptureDetail'),
+  datasetReview: document.querySelector('#datasetReview'),
+  datasetReviewAudio: document.querySelector('#datasetReviewAudio'),
+  datasetReviewMeta: document.querySelector('#datasetReviewMeta'),
+  datasetKeepButton: document.querySelector('#datasetKeepButton'),
+  datasetRetryButton: document.querySelector('#datasetRetryButton'),
+  datasetDeleteAllButton: document.querySelector('#datasetDeleteAllButton'),
+  datasetEmptyState: document.querySelector('#datasetEmptyState'),
+  datasetSamples: document.querySelector('#datasetSamples'),
+  positiveProgress: document.querySelector('#positiveProgress'),
+  negativeProgress: document.querySelector('#negativeProgress'),
+  positiveProgressBar: document.querySelector('#positiveProgressBar'),
+  negativeProgressBar: document.querySelector('#negativeProgressBar'),
   deviceConnection: document.querySelector('#deviceConnection'),
   deviceAudioFormat: document.querySelector('#deviceAudioFormat'),
   firmwareReadout: document.querySelector('#firmwareReadout'),
@@ -60,11 +85,67 @@ const featurePresentation = {
   audio: ['Audio testing', 'Ready'],
   leds: ['LED testing', 'Preview'],
   wake: ['Wake activity', 'Armed'],
+  dataset: ['Wake dataset', 'Local only'],
   device: ['Device information', 'Online'],
 };
 const FRANKY_SUUUPER_ACTION = 'device.sfx.frankys_suuuper';
 const FRANKY_SUUUPER_SFX = 'frankys_suuuper';
 const SFX_PLAYBACK_TIMEOUT_MS = 12000;
+const DATASET_CAPTURE_DURATION_MS = 3000;
+const positiveInstructions = [
+  'Use your ordinary speaking voice.',
+  'Use your ordinary speaking voice again.',
+  'Say it naturally, without emphasizing either word.',
+  'Use a relaxed delivery.',
+  'Use the voice you would use across the room.',
+  'Say it a little more softly.',
+  'Say it softly but clearly.',
+  'Use a calm, low-energy delivery.',
+  'Say it as though Franky is nearby.',
+  'Use a quiet conversational voice.',
+  'Say it a little more firmly.',
+  'Use a clear, projected voice.',
+  'Say it as though Franky is several feet away.',
+  'Use a brighter tone.',
+  'Use a slightly lower pitch.',
+  'Say it slightly faster than usual.',
+  'Say it briskly, as one phrase.',
+  'Use your natural quick delivery.',
+  'Say it with a short gap between the words.',
+  'Say it slowly without exaggerating.',
+  'Turn slightly left and speak naturally.',
+  'Turn slightly right and speak naturally.',
+  'Look just past Franky and speak naturally.',
+  'Say it while sitting back from the microphones.',
+  'Say it after one natural breath.',
+  'Use the delivery most likely in daily use.',
+  'Repeat your ordinary daily-use delivery.',
+  'Use a relaxed end-of-day voice.',
+  'Use a crisp morning voice.',
+  'Finish with your most representative delivery.',
+];
+const hardNegativePrompts = [
+  'Frankly.',
+  'Yo Frank.',
+  'Hey Franky.',
+  'Hello Franky.',
+  'Yo Frankie boy.',
+  'Go Franky.',
+  'You’re frankly mistaken.',
+  'Frank is here.',
+  'Yo friendly people.',
+  'Hey Frankie.',
+  'Turn on the desk lamp.',
+  'What time is it?',
+  'The build finished successfully.',
+  'Could you check the weather?',
+  'I’m heading into the kitchen.',
+  'This room is very quiet.',
+  'Please remind me tomorrow.',
+  'That was surprisingly fast.',
+  'We should try that again.',
+  'No assistant invocation in this sentence.',
+];
 
 let port;
 let reader;
@@ -85,6 +166,13 @@ let transcriptionInFlight = false;
 let transcriptionSequence = 0;
 let pendingSfxPlayback;
 let wakeCount = 0;
+let wakeThresholdPercent = 96;
+let wakeDiagnosticsEnabled = false;
+let wakeCapabilities = new Set();
+let wakeDatasetStatus;
+let wakeDatasetMutationToken;
+let pendingDatasetSample;
+let datasetReviewUrl;
 let currentState = 'offline';
 let wakeProfile = {
   engineId: 'microwakeword',
@@ -110,6 +198,206 @@ function setWakeProfile(engineId, phraseId) {
 
 function isConnected() {
   return els.appRoot.dataset.connected === 'true';
+}
+
+function updateWakeDiagnosticControls() {
+  const connected = isConnected();
+  const thresholdSupported = wakeCapabilities.has('wake_threshold');
+  const diagnosticsSupported = wakeCapabilities.has('wake_diagnostics');
+  els.wakeThresholdSelect.disabled = !connected || !thresholdSupported;
+  els.wakeDiagnosticsButton.disabled = !connected || !diagnosticsSupported;
+  els.wakeDiagnosticsButton.textContent = wakeDiagnosticsEnabled
+    ? 'Hide near misses'
+    : 'Show near misses';
+  if (!diagnosticsSupported) {
+    els.wakeScoreReadout.textContent = connected ? 'Firmware update required' : 'Diagnostics off';
+  } else if (!wakeDiagnosticsEnabled) {
+    els.wakeScoreReadout.textContent = 'Diagnostics off';
+  }
+  els.wakeThresholdDetail.textContent = thresholdSupported
+    ? `${wakeThresholdPercent}% cutoff · temporary until reboot`
+    : 'Temporary tuning unavailable';
+}
+
+function currentDatasetPrompt() {
+  const positive = els.datasetCategory.value === 'positive';
+  const count = positive
+    ? wakeDatasetStatus?.positiveCount || 0
+    : wakeDatasetStatus?.hardNegativeCount || 0;
+  if (positive) {
+    const index = Math.min(count, positiveInstructions.length - 1);
+    return {
+      category: 'positive',
+      id: `positive-${String(index + 1).padStart(2, '0')}`,
+      text: 'Yo Franky',
+      instruction: positiveInstructions[index],
+      step: `Positive sample ${index + 1} of ${positiveInstructions.length}`,
+    };
+  }
+
+  const index = Math.min(count, hardNegativePrompts.length - 1);
+  return {
+    category: 'hard-negative',
+    id: `hard-negative-${String(index + 1).padStart(2, '0')}`,
+    text: hardNegativePrompts[index],
+    instruction: 'Say the displayed phrase naturally. It must not activate Franky.',
+    step: `Hard negative ${index + 1} of ${hardNegativePrompts.length}`,
+  };
+}
+
+function updateDatasetPrompt() {
+  const prompt = currentDatasetPrompt();
+  els.datasetPromptStep.textContent = prompt.step;
+  els.datasetPromptText.textContent = `“${prompt.text}”`;
+  els.datasetPromptInstruction.textContent = prompt.instruction;
+}
+
+function updateDatasetControls() {
+  const connected = isConnected();
+  const supported = wakeCapabilities.has('wake_sample');
+  const busy = Boolean(recordingContext || pendingDatasetSample || transcriptionInFlight);
+  els.datasetCaptureButton.disabled = !connected || !supported || busy;
+  if (!connected) {
+    els.datasetCaptureStatus.textContent = 'Connect Franky';
+    els.datasetCaptureDetail.textContent = 'Exact wake-model input · nothing saved automatically';
+  } else if (!supported) {
+    els.datasetCaptureStatus.textContent = 'Firmware update required';
+    els.datasetCaptureDetail.textContent = 'The connected firmware cannot export wake-model samples';
+  } else if (!pendingDatasetSample && !recordingContext) {
+    els.datasetCaptureStatus.textContent = 'Ready';
+    els.datasetCaptureDetail.textContent = 'Three seconds · processed mono · review before keeping';
+  }
+}
+
+function clearPendingDatasetSample() {
+  if (datasetReviewUrl) {
+    URL.revokeObjectURL(datasetReviewUrl);
+    datasetReviewUrl = undefined;
+  }
+  pendingDatasetSample = undefined;
+  els.datasetReviewAudio.removeAttribute('src');
+  els.datasetReview.hidden = true;
+  els.datasetKeepButton.disabled = false;
+  els.datasetRetryButton.disabled = false;
+  updateDatasetControls();
+}
+
+function renderWakeDataset() {
+  const positiveCount = wakeDatasetStatus?.positiveCount || 0;
+  const negativeCount = wakeDatasetStatus?.hardNegativeCount || 0;
+  const positiveTarget = wakeDatasetStatus?.positiveTarget || positiveInstructions.length;
+  const negativeTarget = wakeDatasetStatus?.hardNegativeTarget || hardNegativePrompts.length;
+  els.positiveProgress.textContent = `${positiveCount} / ${positiveTarget}`;
+  els.negativeProgress.textContent = `${negativeCount} / ${negativeTarget}`;
+  els.positiveProgressBar.style.width = `${Math.min(100, positiveCount / positiveTarget * 100)}%`;
+  els.negativeProgressBar.style.width = `${Math.min(100, negativeCount / negativeTarget * 100)}%`;
+
+  const samples = wakeDatasetStatus?.samples || [];
+  els.datasetEmptyState.hidden = samples.length > 0;
+  els.datasetDeleteAllButton.disabled = samples.length === 0 || !wakeDatasetMutationToken;
+  els.datasetSamples.replaceChildren();
+  for (const sample of samples.slice(0, 8)) {
+    const card = document.createElement('article');
+    card.className = 'dataset-sample';
+    const detail = document.createElement('div');
+    const title = document.createElement('strong');
+    title.textContent = sample.category === 'positive' ? 'Positive · Yo Franky' : `Hard negative · ${sample.prompt}`;
+    const meta = document.createElement('small');
+    meta.textContent = `${(sample.durationMilliseconds / 1000).toFixed(1)} s · ${sample.distance} · ${sample.orientation} · ${new Date(sample.createdAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    detail.append(title, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Delete';
+    remove.addEventListener('click', () => void deleteDatasetSample(sample.id, remove));
+    card.append(detail, remove);
+    els.datasetSamples.append(card);
+  }
+  updateDatasetPrompt();
+  updateDatasetControls();
+}
+
+async function refreshWakeDataset() {
+  try {
+    const response = await fetch('/api/wake-dataset', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`Dataset service returned ${response.status}`);
+    const result = await response.json();
+    wakeDatasetStatus = result.status || result;
+    wakeDatasetMutationToken = result.mutationToken || wakeDatasetMutationToken;
+    renderWakeDataset();
+  } catch (error) {
+    els.datasetCaptureStatus.textContent = 'Dataset service unavailable';
+    els.datasetCaptureDetail.textContent = error.message;
+  }
+}
+
+function presentDatasetSample(blob, durationSeconds, levels, context) {
+  clearPendingDatasetSample();
+  datasetReviewUrl = URL.createObjectURL(blob);
+  pendingDatasetSample = { blob, context };
+  els.datasetReviewAudio.src = datasetReviewUrl;
+  els.datasetReviewMeta.textContent =
+    `${durationSeconds.toFixed(1)} s · peak ${formatDb(levels.peakDb)} · RMS ${formatDb(levels.rmsDb)} · not saved yet`;
+  els.datasetReview.hidden = false;
+  els.datasetCaptureStatus.textContent = 'Review sample';
+  els.datasetCaptureDetail.textContent = 'Listen, then keep it or discard it';
+  appendTerminal('DATASET', `Sample ready for review · ${context.prompt.text} · nothing saved yet`);
+  updateDatasetControls();
+}
+
+async function keepDatasetSample() {
+  if (!pendingDatasetSample || !wakeDatasetMutationToken) return;
+  const { blob, context } = pendingDatasetSample;
+  els.datasetKeepButton.disabled = true;
+  els.datasetRetryButton.disabled = true;
+  els.datasetCaptureStatus.textContent = 'Saving locally';
+  const query = new URLSearchParams({
+    category: context.prompt.category,
+    promptId: context.prompt.id,
+    prompt: context.prompt.text,
+    distance: context.distance,
+    orientation: context.orientation,
+    gainDb: String(context.gain),
+  });
+
+  try {
+    const response = await fetch(`/api/wake-dataset/samples?${query}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'audio/wav',
+        'X-Franky-Control-Token': wakeDatasetMutationToken,
+      },
+      body: blob,
+    });
+    if (!response.ok) throw new Error(await readProblem(response, 'The sample could not be saved.'));
+    clearPendingDatasetSample();
+    await refreshWakeDataset();
+    els.datasetCaptureStatus.textContent = 'Sample kept';
+    els.datasetCaptureDetail.textContent = 'Saved locally · ready for the next sample';
+    appendTerminal('DATASET', 'Accepted sample saved to private local storage', 'action-line');
+  } catch (error) {
+    els.datasetKeepButton.disabled = false;
+    els.datasetRetryButton.disabled = false;
+    els.datasetCaptureStatus.textContent = 'Could not save';
+    els.datasetCaptureDetail.textContent = error.message;
+    appendTerminal('ERROR', `Dataset save failed · ${error.message}`, 'error-line');
+  }
+}
+
+async function deleteDatasetSample(id, button) {
+  if (!wakeDatasetMutationToken) return;
+  button.disabled = true;
+  try {
+    const response = await fetch(`/api/wake-dataset/samples/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: { 'X-Franky-Control-Token': wakeDatasetMutationToken },
+    });
+    if (!response.ok) throw new Error(await readProblem(response, 'The sample could not be deleted.'));
+    await refreshWakeDataset();
+    appendTerminal('DATASET', 'One local wake sample permanently deleted');
+  } catch (error) {
+    button.disabled = false;
+    appendTerminal('ERROR', `Dataset delete failed · ${error.message}`, 'error-line');
+  }
 }
 
 function timeStamp() {
@@ -165,6 +453,15 @@ function appendTerminal(kind, message, style = '', eventState = '') {
   if (!terminalPaused) els.terminalLog.scrollTop = els.terminalLog.scrollHeight;
 }
 
+async function readProblem(response, fallback) {
+  try {
+    const problem = await response.json();
+    return problem.detail || problem.title || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function setSystemState(state, { announce = true } = {}) {
   if (!statePresentation[state]) return;
 
@@ -206,6 +503,10 @@ function setConnection(connected, { announce = true } = {}) {
     void refreshTranscriptionStatus();
     void refreshAssistantStatus();
   } else {
+    wakeCapabilities = new Set();
+    wakeDiagnosticsEnabled = false;
+    wakeThresholdPercent = 96;
+    els.wakeThresholdSelect.value = '96';
     els.linkReadout.textContent = 'Down';
     els.wakeEngineReadout.textContent = 'Offline';
     els.deviceConnection.textContent = 'USB serial · disconnected';
@@ -220,6 +521,8 @@ function setConnection(connected, { announce = true } = {}) {
     clearTimeout(assistantStatusTimer);
     assistantStatusTimer = undefined;
   }
+  updateWakeDiagnosticControls();
+  updateDatasetControls();
 }
 
 async function refreshAssistantStatus() {
@@ -338,6 +641,47 @@ function handleLine(line) {
     return;
   }
 
+  if (line.startsWith('CAPABILITIES ')) {
+    wakeCapabilities = new Set(line.split(/\s+/).slice(1));
+    updateWakeDiagnosticControls();
+    updateDatasetControls();
+    appendTerminal('LINK', `Capabilities · ${[...wakeCapabilities].join(', ')}`);
+    return;
+  }
+
+  if (line.startsWith('WAKE_THRESHOLD ')) {
+    const threshold = Number(line.split(/\s+/)[1]);
+    if (!Number.isInteger(threshold) || threshold < 50 || threshold > 99) return;
+    wakeThresholdPercent = threshold;
+    els.wakeThresholdSelect.value = String(threshold);
+    updateWakeDiagnosticControls();
+    appendTerminal('WAKE', `Temporary detection cutoff · ${threshold}%`);
+    return;
+  }
+
+  if (line.startsWith('WAKE_DIAGNOSTICS ')) {
+    wakeDiagnosticsEnabled = line.split(/\s+/)[1] === 'ON';
+    updateWakeDiagnosticControls();
+    appendTerminal(
+      'WAKE',
+      wakeDiagnosticsEnabled ? 'Near-miss score reporting enabled' : 'Near-miss score reporting disabled');
+    return;
+  }
+
+  if (line.startsWith('WAKE_SCORE ')) {
+    const [, scoreText, thresholdText, outcome] = line.split(/\s+/);
+    const score = Number(scoreText);
+    const threshold = Number(thresholdText);
+    if (!Number.isFinite(score) || !Number.isFinite(threshold)) return;
+    els.wakeScoreReadout.textContent = `${score}% peak · ${outcome === 'detected' ? 'detected' : 'near miss'}`;
+    els.wakeThresholdDetail.textContent = `${threshold}% cutoff · temporary until reboot`;
+    appendTerminal(
+      'WAKE',
+      `Candidate peak ${score}% · cutoff ${threshold}% · ${outcome === 'detected' ? 'detected' : 'near miss'}`,
+      outcome === 'detected' ? 'action-line' : 'intent-line');
+    return;
+  }
+
   if (line.startsWith('GAIN ')) {
     const gain = Number(line.split(/\s+/)[1]);
     if (!recordingContext) setCaptureStatus('Ready', `${gain} dB input gain`);
@@ -437,6 +781,15 @@ function handleLine(line) {
     return;
   }
 
+  if (line.startsWith('WAKE_SAMPLE_START ')) {
+    const durationMs = Number(line.split(' ')[1]);
+    beginCountdown(durationMs);
+    els.datasetCaptureStatus.textContent = 'Recording now';
+    els.datasetCaptureDetail.textContent = 'Say the displayed phrase once';
+    appendTerminal('DATASET', `Wake-model input capture started · ${(durationMs / 1000).toFixed(1)} seconds`);
+    return;
+  }
+
   if (line.startsWith('STATE ')) {
     const nextState = line.split(/\s+/)[1];
     if (!(transcriptionInFlight && nextState === 'idle')) setSystemState(nextState);
@@ -455,6 +808,10 @@ function handleLine(line) {
     setCaptureStatus('Receiving audio', `${(byteCount / 1024).toFixed(0)} KB over USB`);
     setSystemState('processing');
     appendTerminal('AUDIO', `Receiving ${(byteCount / 1024).toFixed(0)} KB from Franky`);
+    if (recordingContext?.source === 'dataset') {
+      els.datasetCaptureStatus.textContent = 'Receiving sample';
+      els.datasetCaptureDetail.textContent = `${(byteCount / 1024).toFixed(0)} KB over the local USB link`;
+    }
     return;
   }
 
@@ -466,6 +823,11 @@ function handleLine(line) {
   if (line.startsWith('ERROR ')) {
     finishCapture();
     const message = line.slice(6).replaceAll('_', ' ');
+    if (recordingContext?.source === 'dataset') {
+      els.datasetCaptureStatus.textContent = 'Board error';
+      els.datasetCaptureDetail.textContent = message;
+    }
+    recordingContext = undefined;
     if (pendingSfxPlayback) {
       const pending = pendingSfxPlayback;
       pendingSfxPlayback = undefined;
@@ -642,16 +1004,24 @@ async function disconnect({ notifyBoard = true, reason = 'Disconnected from Fran
 
 function beginCountdown(durationMs) {
   const startedAt = performance.now();
-  els.recordButton.classList.add('recording');
-  els.recordButton.textContent = 'Recording';
+  const datasetCapture = recordingContext?.source === 'dataset';
+  const activeButton = datasetCapture ? els.datasetCaptureButton : els.recordButton;
+  activeButton.classList.add('recording');
+  activeButton.textContent = 'Recording';
   els.recordButton.disabled = true;
-  els.stopButton.disabled = false;
+  els.datasetCaptureButton.disabled = true;
+  els.stopButton.disabled = datasetCapture;
   for (const button of els.stateButtons) button.disabled = true;
   setSystemState('listening');
 
   const update = () => {
     const remaining = Math.max(0, durationMs - (performance.now() - startedAt));
-    setCaptureStatus('Recording', `${(remaining / 1000).toFixed(1)} seconds remaining`);
+    if (datasetCapture) {
+      els.datasetCaptureStatus.textContent = 'Recording now';
+      els.datasetCaptureDetail.textContent = `${(remaining / 1000).toFixed(1)} seconds remaining`;
+    } else {
+      setCaptureStatus('Recording', `${(remaining / 1000).toFixed(1)} seconds remaining`);
+    }
   };
   update();
   countdownTimer = setInterval(update, 100);
@@ -663,8 +1033,11 @@ function finishCapture() {
   els.recordButton.classList.remove('recording');
   els.recordButton.textContent = 'Record audio';
   els.recordButton.disabled = !isConnected();
+  els.datasetCaptureButton.classList.remove('recording');
+  els.datasetCaptureButton.textContent = 'Record 3-second sample';
   els.stopButton.disabled = true;
   for (const button of els.stateButtons) button.disabled = !isConnected();
+  updateDatasetControls();
 }
 
 function writeAscii(view, offset, text) {
@@ -804,9 +1177,16 @@ function addRecording(header, pcm) {
   const levels = calculateLevels(selected.pcm);
   const source = captureContext?.source;
   recordingContext = undefined;
+  updateDatasetControls();
 
   if (source === 'wake') {
     void transcribeWakeUtterance(blob, durationSeconds);
+    return;
+  }
+
+  if (source === 'dataset') {
+    presentDatasetSample(blob, durationSeconds, levels, captureContext);
+    if (isConnected()) setSystemState('idle');
     return;
   }
 
@@ -1012,12 +1392,93 @@ els.recordButton.addEventListener('click', async () => {
   }
 });
 
+els.datasetCategory.addEventListener('change', updateDatasetPrompt);
+
+els.datasetCaptureButton.addEventListener('click', async () => {
+  if (!wakeCapabilities.has('wake_sample')) return;
+  const gain = Number(els.gainSelect.value);
+  const prompt = currentDatasetPrompt();
+  recordingContext = {
+    label: `${prompt.step} · ${prompt.text}`,
+    channelMode: 'mix',
+    gain,
+    source: 'dataset',
+    prompt,
+    distance: els.datasetDistance.value,
+    orientation: els.datasetOrientation.value,
+  };
+  els.recordButton.disabled = true;
+  els.datasetCaptureButton.disabled = true;
+  els.datasetCaptureStatus.textContent = 'Starting';
+  els.datasetCaptureDetail.textContent = 'Watch for the recording state, then say the phrase once';
+  try {
+    await sendCommand(`GAIN ${gain}`);
+    await sendCommand(`WAKE_SAMPLE ${DATASET_CAPTURE_DURATION_MS}`);
+  } catch (error) {
+    recordingContext = undefined;
+    finishCapture();
+    els.datasetCaptureStatus.textContent = 'Could not start';
+    els.datasetCaptureDetail.textContent = error.message;
+    appendTerminal('ERROR', `Dataset capture failed · ${error.message}`, 'error-line');
+  }
+});
+
+els.datasetKeepButton.addEventListener('click', () => void keepDatasetSample());
+els.datasetRetryButton.addEventListener('click', () => {
+  clearPendingDatasetSample();
+  els.datasetCaptureStatus.textContent = 'Discarded';
+  els.datasetCaptureDetail.textContent = 'Nothing was saved · ready to record again';
+  appendTerminal('DATASET', 'Pending sample discarded without saving');
+});
+
+els.datasetDeleteAllButton.addEventListener('click', async () => {
+  if (!wakeDatasetMutationToken || !window.confirm(
+    'Permanently delete every locally saved wake-word sample? This cannot be undone.')) return;
+  els.datasetDeleteAllButton.disabled = true;
+  try {
+    const response = await fetch('/api/wake-dataset', {
+      method: 'DELETE',
+      headers: { 'X-Franky-Control-Token': wakeDatasetMutationToken },
+    });
+    if (!response.ok) throw new Error(await readProblem(response, 'The dataset could not be deleted.'));
+    await refreshWakeDataset();
+    appendTerminal('DATASET', 'All locally saved wake samples permanently deleted');
+  } catch (error) {
+    els.datasetDeleteAllButton.disabled = false;
+    appendTerminal('ERROR', `Dataset delete failed · ${error.message}`, 'error-line');
+  }
+});
+
 els.stopButton.addEventListener('click', async () => {
   els.stopButton.disabled = true;
   try {
     await sendCommand('STOP');
   } catch (error) {
     appendTerminal('ERROR', error.message, 'error-line');
+  }
+});
+
+els.wakeThresholdSelect.addEventListener('change', async () => {
+  const requestedThreshold = Number(els.wakeThresholdSelect.value);
+  els.wakeThresholdSelect.disabled = true;
+  try {
+    await sendCommand(`WAKE_THRESHOLD ${requestedThreshold}`);
+  } catch (error) {
+    els.wakeThresholdSelect.value = String(wakeThresholdPercent);
+    appendTerminal('ERROR', `Could not change wake cutoff · ${error.message}`, 'error-line');
+  } finally {
+    updateWakeDiagnosticControls();
+  }
+});
+
+els.wakeDiagnosticsButton.addEventListener('click', async () => {
+  els.wakeDiagnosticsButton.disabled = true;
+  try {
+    await sendCommand(`WAKE_DIAGNOSTICS ${wakeDiagnosticsEnabled ? 'OFF' : 'ON'}`);
+  } catch (error) {
+    appendTerminal('ERROR', `Could not change wake diagnostics · ${error.message}`, 'error-line');
+  } finally {
+    updateWakeDiagnosticControls();
   }
 });
 
@@ -1058,6 +1519,7 @@ navigator.serial?.addEventListener('disconnect', event => {
 window.addEventListener('beforeunload', () => {
   stopHeartbeat();
   for (const url of objectUrls) URL.revokeObjectURL(url);
+  if (datasetReviewUrl) URL.revokeObjectURL(datasetReviewUrl);
 });
 
 updateEmptyState();
@@ -1066,6 +1528,7 @@ selectFeature('audio');
 appendTerminal('SYSTEM', 'Franky control board loaded · waiting for connection');
 void refreshTranscriptionStatus();
 void refreshAssistantStatus();
+void refreshWakeDataset();
 
 if (!('serial' in navigator)) {
   els.connectButton.disabled = true;

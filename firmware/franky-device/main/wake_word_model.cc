@@ -20,7 +20,9 @@ constexpr size_t kAudioStepSamples = 160;
 constexpr size_t kFeatureCount = 40;
 constexpr size_t kFeatureFramesPerInference = 3;
 constexpr size_t kProbabilityWindow = 5;
-constexpr uint16_t kProbabilitySumThreshold = 1229;  // Mean probability > 0.96.
+constexpr uint8_t kDefaultThresholdPercent = 96;
+constexpr uint8_t kMinimumThresholdPercent = 50;
+constexpr uint8_t kMaximumThresholdPercent = 99;
 constexpr size_t kPreprocessorArenaBytes = 24 * 1024;
 constexpr size_t kWakeArenaBytes = 160 * 1024;
 constexpr int kWakeResourceVariableCount = 6;
@@ -45,6 +47,8 @@ size_t s_feature_frame_count;
 uint8_t s_probabilities[kProbabilityWindow];
 size_t s_probability_count;
 size_t s_probability_index;
+uint8_t s_threshold_percent = kDefaultThresholdPercent;
+uint8_t s_last_score_percent;
 bool s_initialized;
 
 uint8_t *allocate_arena(size_t bytes)
@@ -145,7 +149,12 @@ bool process_feature_frame(const int8_t *features)
 
     uint16_t sum = 0;
     for (uint8_t value : s_probabilities) sum += value;
-    return sum >= kProbabilitySumThreshold;
+    constexpr uint32_t probability_scale = 255 * kProbabilityWindow;
+    s_last_score_percent = static_cast<uint8_t>(
+        (static_cast<uint32_t>(sum) * 100 + probability_scale / 2) /
+        probability_scale);
+    return static_cast<uint32_t>(sum) * 100 >=
+        static_cast<uint32_t>(s_threshold_percent) * probability_scale;
 }
 
 bool process_audio_window()
@@ -252,7 +261,32 @@ extern "C" void franky_wake_model_reset(void)
     s_feature_frame_count = 0;
     s_probability_count = 0;
     s_probability_index = 0;
+    s_last_score_percent = 0;
     if (s_wake_resources != nullptr) s_wake_resources->ResetAll();
+}
+
+extern "C" esp_err_t franky_wake_model_set_threshold_percent(
+    uint8_t threshold_percent)
+{
+    if (!s_initialized) return ESP_ERR_INVALID_STATE;
+    if (threshold_percent < kMinimumThresholdPercent ||
+        threshold_percent > kMaximumThresholdPercent) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    s_threshold_percent = threshold_percent;
+    franky_wake_model_reset();
+    return ESP_OK;
+}
+
+extern "C" uint8_t franky_wake_model_get_threshold_percent(void)
+{
+    return s_threshold_percent;
+}
+
+extern "C" uint8_t franky_wake_model_get_last_score_percent(void)
+{
+    return s_last_score_percent;
 }
 
 extern "C" bool franky_wake_model_process(

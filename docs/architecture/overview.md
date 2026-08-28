@@ -35,12 +35,19 @@ transport without moving speech recognition or command execution onto the board.
 - Authenticate to selected devices, services, or local integrations.
 - Validate and execute actions.
 - Produce structured, privacy-aware diagnostics.
+- Persist wake-training audio only inside the separately approved, deliberate
+  record/review/keep workflow; ordinary wake audio remains ephemeral.
 
 ## Selected custom runtime shape
 
 Use one .NET 10 computer application with explicit internal boundaries for device sessions, speech adapters, conversation, capabilities, and diagnostics. Model and speech providers remain replaceable. Split a boundary into another process only when measurement or a native dependency provides a concrete reason.
 
 The first speech-to-text provider runs Whisper locally through Whisper.net.
+The runtime now also has a provider-neutral speech-synthesis boundary that
+accepts bounded text, produces 16 kHz mono PCM for the current board path,
+rejects overlapping work and invalid output, supports cooperative cancellation,
+and emits metadata-only diagnostics. A production TTS engine and voice remain
+unselected, and the boundary is not yet connected to device playback.
 During the USB development phase, the same .NET process serves the Franky
 control board, its loopback-only transcription endpoint, and an assistant-turn
 endpoint that reuses the existing conversation session and allowlisted tool

@@ -35,6 +35,7 @@ static volatile bool s_recording;
 static volatile bool s_stop_requested;
 static volatile bool s_host_connected;
 static volatile bool s_wake_action_pending;
+static volatile bool s_wake_sample_pending;
 static volatile uint32_t s_last_host_contact_ms;
 static float s_gain_db = DEFAULT_GAIN_DB;
 
@@ -55,6 +56,15 @@ static void print_device_info(void)
         "WAKE_ENGINE %s %s\n",
         wake_word_engine_name(),
         wake_word_phrase_id());
+    if (strcmp(wake_word_engine_name(), "microwakeword") == 0) {
+        printf("CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample\n");
+        printf("WAKE_THRESHOLD %u\n", wake_word_get_threshold_percent());
+        printf(
+            "WAKE_DIAGNOSTICS %s\n",
+            wake_word_diagnostics_enabled() ? "ON" : "OFF");
+    } else {
+        printf("CAPABILITIES wake_capture named_sfx\n");
+    }
 }
 
 static void play_named_sfx(const char *sfx_name)
@@ -64,7 +74,7 @@ static void play_named_sfx(const char *sfx_name)
         show_state(SYSTEM_LED_ERROR);
         return;
     }
-    if (s_recording || s_wake_action_pending) {
+    if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
         printf("ERROR audio_capture_in_progress\n");
         return;
     }
@@ -111,7 +121,7 @@ static void show_resting_state(void)
 
 static void play_status_cue(audio_cue_t cue, const char *cue_name)
 {
-    if (s_recording || s_wake_action_pending) return;
+    if (s_recording || s_wake_action_pending || s_wake_sample_pending) return;
 
     esp_err_t pause_error = wake_word_pause();
     if (pause_error != ESP_OK) {
@@ -134,7 +144,7 @@ static void note_host_contact(void)
     const bool reconnected = !s_host_connected;
     s_host_connected = true;
     s_last_host_contact_ms = now_ms();
-    if (reconnected && !s_recording) {
+    if (reconnected && !s_recording && !s_wake_sample_pending) {
         system_led_set_state(SYSTEM_LED_IDLE);
         play_status_cue(AUDIO_CUE_CONNECTED, "connection");
     }
@@ -210,7 +220,7 @@ static void recording_task(void *argument)
 
 static void start_recording(uint32_t duration_ms)
 {
-    if (s_recording) {
+    if (s_recording || s_wake_sample_pending) {
         printf("ERROR already_recording\n");
         show_state(SYSTEM_LED_ERROR);
         return;
@@ -261,6 +271,80 @@ static void start_recording(uint32_t duration_ms)
         printf("ERROR could_not_start_recording\n");
         show_state(SYSTEM_LED_ERROR);
         wake_word_resume();
+    }
+}
+
+static void wake_sample_task(void *argument)
+{
+    recording_request_t *request = argument;
+    const uint32_t duration_ms = request->duration_ms;
+    free(request);
+
+    printf("WAKE_SAMPLE_START %u\n", (unsigned)duration_ms);
+    show_state(SYSTEM_LED_LISTENING);
+    wake_utterance_t sample = {0};
+    esp_err_t capture_error = wake_word_capture_sample(duration_ms, &sample);
+
+    if (capture_error == ESP_OK) {
+        const size_t captured_bytes = sample.sample_count * sizeof(int16_t);
+        show_state(SYSTEM_LED_PROCESSING);
+        printf(
+            "AUDIO %u %u 1 16\n",
+            (unsigned)captured_bytes,
+            FRANKY_SAMPLE_RATE);
+        fwrite(sample.samples, 1, captured_bytes, stdout);
+        printf("\nEND\n");
+    } else {
+        printf("ERROR wake_sample_failed_%s\n", esp_err_to_name(capture_error));
+        show_state(SYSTEM_LED_ERROR);
+    }
+
+    wake_word_release_utterance(&sample);
+    esp_err_t resume_error = wake_word_resume();
+    if (resume_error != ESP_OK) {
+        printf("ERROR wake_detector_did_not_resume\n");
+        show_state(SYSTEM_LED_ERROR);
+    } else {
+        show_resting_state();
+    }
+    s_wake_sample_pending = false;
+    vTaskDelete(NULL);
+}
+
+static void start_wake_sample(uint32_t duration_ms)
+{
+    if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
+        printf("ERROR audio_capture_in_progress\n");
+        return;
+    }
+    if (duration_ms < 500 || duration_ms > 5000) {
+        printf("ERROR wake_sample_duration_must_be_500_to_5000_ms\n");
+        return;
+    }
+    if (strcmp(wake_word_engine_name(), "microwakeword") != 0) {
+        printf("ERROR wake_sample_not_supported\n");
+        return;
+    }
+
+    recording_request_t *request = malloc(sizeof(recording_request_t));
+    if (request == NULL) {
+        printf("ERROR not_enough_memory\n");
+        return;
+    }
+    request->duration_ms = duration_ms;
+    s_wake_sample_pending = true;
+    BaseType_t task_created = xTaskCreatePinnedToCore(
+        wake_sample_task,
+        "wake_sample",
+        6144,
+        request,
+        6,
+        NULL,
+        1);
+    if (task_created != pdPASS) {
+        free(request);
+        s_wake_sample_pending = false;
+        printf("ERROR could_not_start_wake_sample\n");
     }
 }
 
@@ -326,7 +410,7 @@ static void wake_action_task(void *argument)
 
 static void wake_word_detected(void)
 {
-    if (s_recording || s_wake_action_pending) {
+    if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
         wake_word_resume();
         return;
     }
@@ -371,7 +455,7 @@ static void handle_command(char *line)
     }
 
     if (strcmp(line, "HELLO") == 0 || strcmp(line, "INFO") == 0) {
-        if (!s_recording) {
+        if (!s_recording && !s_wake_sample_pending) {
             show_state(SYSTEM_LED_IDLE);
         }
         print_device_info();
@@ -382,6 +466,8 @@ static void handle_command(char *line)
         if (s_recording) {
             s_stop_requested = true;
             printf("STOPPING\n");
+        } else if (s_wake_sample_pending) {
+            printf("ERROR wake_sample_finishes_automatically\n");
         } else {
             printf("IDLE\n");
             show_state(SYSTEM_LED_IDLE);
@@ -395,9 +481,15 @@ static void handle_command(char *line)
         return;
     }
 
+    unsigned wake_sample_duration_ms = 0;
+    if (sscanf(line, "WAKE_SAMPLE %u", &wake_sample_duration_ms) == 1) {
+        start_wake_sample(wake_sample_duration_ms);
+        return;
+    }
+
     float gain_db = 0.0f;
     if (sscanf(line, "GAIN %f", &gain_db) == 1) {
-        if (s_recording || s_wake_action_pending) {
+        if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
             printf("ERROR cannot_change_gain_while_recording\n");
             show_state(SYSTEM_LED_ERROR);
         } else {
@@ -419,10 +511,63 @@ static void handle_command(char *line)
         return;
     }
 
+    unsigned threshold_percent = 0;
+    if (sscanf(line, "WAKE_THRESHOLD %u", &threshold_percent) == 1) {
+        if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
+            printf("ERROR cannot_change_wake_threshold_while_active\n");
+            return;
+        }
+        if (threshold_percent > UINT8_MAX) {
+            printf("ERROR wake_threshold_must_be_50_to_99_percent\n");
+            return;
+        }
+
+        esp_err_t pause_error = wake_word_pause();
+        if (pause_error != ESP_OK) {
+            printf("ERROR wake_detector_did_not_pause\n");
+            wake_word_resume();
+            return;
+        }
+        esp_err_t threshold_error = wake_word_set_threshold_percent(
+            (uint8_t)threshold_percent);
+        esp_err_t resume_error = wake_word_resume();
+        if (threshold_error == ESP_OK && resume_error == ESP_OK) {
+            printf("WAKE_THRESHOLD %u\n", wake_word_get_threshold_percent());
+        } else if (threshold_error == ESP_ERR_INVALID_ARG) {
+            printf("ERROR wake_threshold_must_be_50_to_99_percent\n");
+        } else if (threshold_error == ESP_ERR_NOT_SUPPORTED) {
+            printf("ERROR wake_threshold_not_supported\n");
+        } else {
+            printf("ERROR wake_threshold_change_failed\n");
+        }
+        return;
+    }
+
+    char diagnostics_state[8];
+    if (sscanf(line, "WAKE_DIAGNOSTICS %7s", diagnostics_state) == 1) {
+        bool enabled;
+        if (strcmp(diagnostics_state, "ON") == 0) {
+            enabled = true;
+        } else if (strcmp(diagnostics_state, "OFF") == 0) {
+            enabled = false;
+        } else {
+            printf("ERROR wake_diagnostics_must_be_on_or_off\n");
+            return;
+        }
+
+        esp_err_t error = wake_word_set_diagnostics(enabled);
+        if (error == ESP_OK) {
+            printf("WAKE_DIAGNOSTICS %s\n", enabled ? "ON" : "OFF");
+        } else {
+            printf("ERROR wake_diagnostics_not_supported\n");
+        }
+        return;
+    }
+
     char state_name[24];
     if (sscanf(line, "STATE %23s", state_name) == 1) {
         system_led_state_t state;
-        if (s_recording || s_wake_action_pending) {
+        if (s_recording || s_wake_action_pending || s_wake_sample_pending) {
             printf("ERROR cannot_preview_state_while_recording\n");
         } else if (system_led_state_from_name(state_name, &state)) {
             show_state(state);
