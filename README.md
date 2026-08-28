@@ -22,7 +22,9 @@ recognition and will grow into conversation and home-control features.
 > embedded “SUUUPER” clip and waits for the board to acknowledge completion.
 > Direct serial start/completion and live Ollama intent selection are verified;
 > audible playback and the complete spoken path await user observation. Wi-Fi
-> transport and generated spoken answers remain ahead.
+> transport and generated spoken answers remain ahead. A separate passive
+> **Franky Presence** page is now implemented against deterministic mock events;
+> it is not connected to the runtime yet.
 
 ## What works today
 
@@ -46,6 +48,9 @@ recognition and will grow into conversation and home-control features.
   after the ESP32 finishes playback.
 - A local exact-intent router for common forms such as “How's it going?” so this
   signature response does not depend on probabilistic model tool selection.
+- A standalone mocked Franky Presence display for the latest transcript, reply,
+  and truthful lifecycle activity, with privacy, offline, error, narrow-screen,
+  and reduced-motion presentations. Live runtime delivery is not implemented.
 
 ## How it fits together
 
@@ -64,6 +69,10 @@ ESP32-S3 board ── USB serial today / Wi-Fi later ──> Franky runtime
 The browser control board is intentionally a development tool. The intended
 room setup uses Wi-Fi between the ESP32 and the computer, with USB retained for
 power, flashing, and diagnostics.
+
+Franky Presence is a separate passive display rather than a second control
+surface. Its current deterministic event source is for visual development only.
+The eventual runtime-owned, one-way display feed remains planned.
 
 ## Try the control board
 
@@ -92,6 +101,15 @@ cloud provider is selected, transcript text crosses that provider boundary.
 
 See the [control-board guide](tools/franky-control-board/README.md) for the full
 testing flow and [firmware guide](firmware/README.md) for board setup.
+
+## Try the passive presence mock
+
+Serve `tools/franky-presence/` from a loopback-only static server, then open its
+root page for the passive lifecycle or `harness.html` for separate development
+controls. The presence page itself contains no commands or settings.
+
+See the [Franky Presence guide](tools/franky-presence/README.md) for the exact
+launch command, fixed-state queries, current limitations, and privacy boundary.
 
 ## Develop the runtime
 
@@ -122,6 +140,7 @@ not an application credential. Setup and privacy details live in the
 | [`firmware/franky-device/`](firmware/franky-device/) | ESP32 firmware for microphones, wake detection, embedded audio, speaker cues, and LEDs |
 | [`services/Franky.Runtime/`](services/Franky.Runtime/) | Computer-hosted .NET runtime and local transcription service |
 | [`tools/franky-control-board/`](tools/franky-control-board/) | Local browser interface for developing and testing Franky |
+| [`tools/franky-presence/`](tools/franky-presence/) | Passive always-open display, currently driven by deterministic mock events |
 | [`tools/wake-word/`](tools/wake-word/) | Reproducible local training workspace for “Yo Franky” |
 | [`tests/Franky.Runtime.Tests/`](tests/Franky.Runtime.Tests/) | Runtime and safety-boundary checks |
 | [`docs/`](docs/) | Product, architecture, development, and decision documentation |

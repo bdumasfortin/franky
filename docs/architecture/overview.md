@@ -63,6 +63,21 @@ records the wake-model choice.
 [ADR-0009](../adr/0009-use-local-ollama-for-current-conversation-provider.md)
 records the local conversation-provider choice.
 
+## Passive presence display boundary
+
+Franky Presence is a separate, passive browser surface for the latest
+transcript, reply, and trusted lifecycle or capability activity. A standalone
+implementation exists against deterministic local mock events. It is not
+connected to the .NET runtime and does not change the existing control board.
+
+The eventual display feed belongs on the runtime side only after the runtime
+owns authoritative device and session lifecycle state. The likely delivery is
+a one-way Server-Sent Events route, but that transport is provisional. The
+surface must remain ephemeral and read-only: no POST routes, serial access,
+commands, retries, settings, tool execution, model prompts, or conversation
+history. The [provisional presence display event](presence-display-event.md)
+defines the mocked semantics without approving live integration.
+
 ## Target Wi-Fi communication shape
 
 Use a persistent WebSocket connection initiated by the ESP32. Carry small JSON control messages and binary mono PCM audio frames over the same authenticated session. [ADR-0004](../adr/0004-use-websocket-json-and-pcm.md) records the accepted transport baseline. The wake-driven USB prototype now supplies evidence for the utterance lifecycle, but its exact network messages still need to be incorporated into the [draft device protocol](device-protocol-v1.md) before Wi-Fi implementation.

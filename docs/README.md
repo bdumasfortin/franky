@@ -11,6 +11,7 @@ the authoritative history for consequential choices.
 | [Product definition](product/v1.md) | The approved experience, boundaries, and success criteria |
 | [Architecture overview](architecture/overview.md) | Responsibilities of the ESP32 and computer runtime |
 | [Implementation plan](plan/v1-implementation.md) | Completed increments, active work, and deferred scope |
+| [Franky Presence design](design/franky-presence.md) | Research synthesis, design principles, explored directions, and approved visual language |
 | [Development workflow](development/workflow.md) | Local setup, validation, secrets, and evidence expectations |
 | [Hardware bring-up](../firmware/hardware-bring-up.md) | Evidence collected from the physical Waveshare board |
 
@@ -18,6 +19,8 @@ the authoritative history for consequential choices.
 
 - [Franky control board](../tools/franky-control-board/README.md) — run the
   browser interface and exercise audio, LEDs, wake detection, and transcription.
+- [Franky Presence](../tools/franky-presence/README.md) — run the separate
+  passive display against deterministic local mock events.
 - [Firmware](../firmware/README.md) — understand and flash the ESP32-side project.
 - [Wake-word training](../tools/wake-word/README.md) — generate the local “Yo
   Franky” model used by custom firmware builds.
@@ -31,12 +34,17 @@ the authoritative history for consequential choices.
 
 - [Architecture overview](architecture/overview.md)
 - [Device protocol v1](architecture/device-protocol-v1.md)
+- [Provisional presence display event](architecture/presence-display-event.md)
 - [Architecture Decision Records](adr/README.md)
 
 ## Product
 
 - [Version 1 product definition](product/v1.md)
 - [Naming decision](product/naming.md)
+
+## Design
+
+- [Franky Presence design direction](design/franky-presence.md)
 
 ## Documentation conventions
 

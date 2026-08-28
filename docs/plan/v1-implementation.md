@@ -59,6 +59,11 @@ generation.
   so common short variants now route through a narrow deterministic matcher
   before the model. Audible playback through the corrected browser path still
   requires user observation.
+- The design-led Franky Presence track produced an approved Phase Stitch visual
+  direction and a separate passive page driven by deterministic mock events.
+  Privacy, offline, error, long-copy, narrow-screen, and reduced-motion states
+  are implemented without modifying the control board or runtime. Live display
+  delivery remains unimplemented.
 
 ## Active vertical slice
 
@@ -80,6 +85,8 @@ Prove the implemented bridge and first device action on the physical voice path:
 4. Implement authenticated Wi-Fi/WebSocket transport and reconnect behavior.
 5. Tune the custom “Yo Franky” model with real-room positives or hard negatives
    only if ordinary use exposes misses or false activations.
+6. Once the runtime owns complete device and session truth, validate and adopt
+   the provisional presence-display event contract and add a one-way live feed.
 
 ## Validation gates
 
