@@ -43,6 +43,9 @@ within 3.5 seconds if the control tab stops publishing.
    starts the .NET control-board service on loopback. The first run downloads
    the `small.en` Whisper model (roughly 466 MiB) to `%LOCALAPPDATA%\Franky\models`.
 4. In the Chromium-based page that opens, choose **Connect to Franky** and select the Espressif USB serial device.
+   After that first authorization, the page attempts to reopen the same
+   Espressif port automatically after a physical unplug/replug or page reload.
+   If automatic reopen fails, choose **Connect to Franky** again.
 5. Say the phrase shown in the Wake area—**“Yo Franky”** on the current custom
    build—wait for the acknowledgement, and speak naturally. Franky stops after
    trailing silence, shows the local transcript, and processes it as an

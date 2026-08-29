@@ -75,11 +75,13 @@ let audioHeader;
 let recordingContext;
 let countdownTimer;
 let heartbeatTimer;
+let reconnectTimer;
 let wakePulseTimer;
 let transcriptStateTimer;
 let transcriptionStatusTimer;
 let assistantStatusTimer;
 let heartbeatInFlight = false;
+let connectionAttemptInFlight = false;
 let disconnecting = false;
 let terminalPaused = false;
 let transcriptionInFlight = false;
@@ -577,17 +579,21 @@ function startHeartbeat() {
   }, 1000);
 }
 
-async function connect() {
-  if (!('serial' in navigator)) return;
+async function connect(preauthorizedPort) {
+  if (!('serial' in navigator) || port || disconnecting || connectionAttemptInFlight) return;
 
+  connectionAttemptInFlight = true;
+  const reconnecting = Boolean(preauthorizedPort);
   els.connectButton.disabled = true;
-  els.connectButton.textContent = 'Connecting…';
+  els.connectButton.textContent = reconnecting ? 'Reconnecting…' : 'Connecting…';
   try {
-    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+    port = preauthorizedPort ?? await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
     await port.open({ baudRate: 115200, bufferSize: 65536 });
     writer = port.writable.getWriter();
     readBuffer = new Uint8Array();
-    appendTerminal('LINK', 'Opening USB serial connection');
+    appendTerminal('LINK', reconnecting
+      ? 'Reopening authorized USB serial connection'
+      : 'Opening USB serial connection');
     void readLoop();
     await new Promise(resolve => setTimeout(resolve, 250));
     await sendCommand('HELLO');
@@ -596,10 +602,29 @@ async function connect() {
     if (port) await disconnect({ notifyBoard: false, reason: 'Connection attempt ended' });
     else setConnection(false, { announce: false });
   } finally {
+    connectionAttemptInFlight = false;
     if (!isConnected()) {
       els.connectButton.disabled = false;
       els.connectButton.textContent = 'Connect to Franky';
     }
+  }
+}
+
+function frankyPortFromEvent(event) {
+  const candidate = event.port ?? event.target;
+  if (typeof candidate?.getInfo !== 'function') return null;
+  return candidate.getInfo().usbVendorId === 0x303a ? candidate : null;
+}
+
+async function reconnectAuthorizedPort() {
+  if (!navigator.serial || port || disconnecting || connectionAttemptInFlight) return;
+  try {
+    const authorizedPorts = await navigator.serial.getPorts();
+    const authorizedFranky = authorizedPorts.find(candidate =>
+      candidate.getInfo().usbVendorId === 0x303a);
+    if (authorizedFranky) await connect(authorizedFranky);
+  } catch (error) {
+    appendTerminal('ERROR', `Could not reopen authorized USB serial connection · ${error.message}`, 'error-line');
   }
 }
 
@@ -1078,12 +1103,25 @@ els.terminalClearButton.addEventListener('click', () => {
   els.terminalLog.replaceChildren();
 });
 
+navigator.serial?.addEventListener('connect', event => {
+  const reconnectedPort = frankyPortFromEvent(event);
+  if (!reconnectedPort || reconnectedPort === port) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    if (!port && !disconnecting) void connect(reconnectedPort);
+  }, 350);
+});
+
 navigator.serial?.addEventListener('disconnect', event => {
-  if (event.target === port) void disconnect({ notifyBoard: false, reason: 'Franky disconnected unexpectedly' });
+  const disconnectedPort = frankyPortFromEvent(event);
+  if (disconnectedPort === port) {
+    void disconnect({ notifyBoard: false, reason: 'Franky disconnected unexpectedly' });
+  }
 });
 
 window.addEventListener('beforeunload', () => {
   stopHeartbeat();
+  clearTimeout(reconnectTimer);
   presenceFeed.dispose();
   for (const url of objectUrls) URL.revokeObjectURL(url);
 });
@@ -1094,6 +1132,7 @@ selectFeature('audio');
 appendTerminal('SYSTEM', 'Franky control board loaded · waiting for connection');
 void refreshTranscriptionStatus();
 void refreshAssistantStatus();
+void reconnectAuthorizedPort();
 
 if (!('serial' in navigator)) {
   els.connectButton.disabled = true;
