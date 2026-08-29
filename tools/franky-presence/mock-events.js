@@ -12,6 +12,15 @@
       privacy: 'unknown'
     },
     {
+      key: 'ready',
+      turnId: null,
+      phase: 'idle',
+      transcript: null,
+      reply: null,
+      activity: null,
+      privacy: 'available'
+    },
+    {
       key: 'idle',
       turnId: 'turn-0041',
       phase: 'idle',

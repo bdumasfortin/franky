@@ -170,6 +170,19 @@ body {
   --presence-accent: #8f9b91;
 }
 
+.presence[data-phase="idle"].is-empty .presence__phase {
+  display: block;
+  color: var(--presence-muted);
+  font-size: clamp(3.4rem, 7vw, 7rem);
+  font-weight: 680;
+}
+
+.presence[data-phase="idle"].is-empty .presence__transcript,
+.presence[data-phase="idle"].is-empty .presence__reply,
+.presence[data-phase="idle"].is-empty .presence__activity {
+  display: none;
+}
+
 .presence[data-phase="listening"],
 .presence[data-phase="transcribing"] {
   --presence-accent: #a8d85d;

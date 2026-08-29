@@ -33,7 +33,7 @@ Then open one of these pages:
 - `http://127.0.0.1:8765/presence/harness.html` — development harness whose controls
   remain outside the embedded presence page.
 
-Fixed mock names are `offline`, `idle`, `listening`, `transcribing`,
+Fixed mock names are `offline`, `ready`, `idle`, `listening`, `transcribing`,
 `processing`, `acting`, `speaking`, `privacy`, `error`, and `long`.
 
 The `source=harness` query mode is an internal development seam. It accepts
@@ -45,6 +45,8 @@ they stop for 3.5 seconds. Neither channel is the future runtime transport.
 ## Behavior
 
 - Only the latest event is rendered; the page never builds conversation history.
+- A connected idle session with no completed turn shows a visible **Ready**
+  state instead of an empty dark surface.
 - Lower or repeated sequence numbers are discarded.
 - Muted privacy state overrides all ordinary phase content.
 - Offline, privacy, and error have large text, distinct palettes, and simple

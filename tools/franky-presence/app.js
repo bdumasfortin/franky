@@ -181,6 +181,9 @@
       ? event.activity ?? 'Franky is unavailable'
       : event.activity ?? '';
     stageReply(event.reply, phase);
+    presence.classList.toggle(
+      'is-empty',
+      phase === 'idle' && !event.transcript && !event.reply);
 
     presence.classList.remove('is-transitioning');
     void presence.offsetWidth;

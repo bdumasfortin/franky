@@ -6,7 +6,7 @@
   <title>Franky Presence — development harness</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="harness.css?v=1">
-  <script src="mock-events.js?v=1" defer></script>
+  <script src="mock-events.js?v=2" defer></script>
   <script src="harness.js?v=1" defer></script>
 </head>
 <body>
@@ -21,6 +21,7 @@
   <section class="harness-controls" aria-label="Deterministic mock controls">
     <div class="control-row" role="group" aria-label="Choose a mock state">
       <button type="button" data-event="offline">Offline</button>
+      <button type="button" data-event="ready">Ready</button>
       <button type="button" data-event="idle">Idle</button>
       <button type="button" data-event="listening">Listening</button>
       <button type="button" data-event="transcribing">Transcribing</button>
