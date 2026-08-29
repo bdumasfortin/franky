@@ -59,6 +59,12 @@ generation.
   so common short variants now route through a narrow deterministic matcher
   before the model. Audible playback through the corrected browser path still
   requires user observation.
+- The design-led Franky Presence track produced an approved Phase Stitch visual
+  direction and a passive page served by the control-board app. The current USB
+  lifecycle, latest transcript, reply, and confirmed device playback state flow
+  ephemerally from the control-board tab. Privacy, offline, error, long-copy,
+  narrow-screen, reduced-motion, disconnect, and deterministic harness states
+  are implemented without giving the passive page controls or serial access.
 
 ## Active vertical slice
 
@@ -80,6 +86,9 @@ Prove the implemented bridge and first device action on the physical voice path:
 4. Implement authenticated Wi-Fi/WebSocket transport and reconnect behavior.
 5. Tune the custom “Yo Franky” model with real-room positives or hard negatives
    only if ordinary use exposes misses or false activations.
+6. Once the runtime owns complete device and session truth, replace the interim
+   browser channel with a runtime-owned one-way feed and either accept or
+   supersede the provisional presence-display event contract.
 
 ## Validation gates
 

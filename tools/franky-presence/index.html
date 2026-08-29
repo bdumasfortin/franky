@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Franky Presence</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="presence.css?v=2">
+  <script src="mock-events.js?v=1" defer></script>
+  <script src="app.js?v=3" defer></script>
+</head>
+<body>
+  <h1 class="visually-hidden">Franky Presence</h1>
+  <main id="presence" class="presence" data-phase="offline" data-privacy="unknown">
+    <section class="presence__visual" aria-hidden="true">
+      <div class="presence__focus">
+        <div class="presence__symbols">
+          <svg class="presence__symbol presence__symbol--muted" viewBox="0 0 72 72" fill="none">
+            <path d="M27 18v17a9 9 0 0 0 14.5 7.1M45 32V18a9 9 0 0 0-17.2-3.7M20 31v4a16 16 0 0 0 24.7 13.4M36 51v10M27 61h18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <line x1="16" y1="12" x2="57" y2="58" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>
+          </svg>
+          <svg class="presence__symbol presence__symbol--offline" viewBox="0 0 72 72" fill="none">
+            <circle cx="17" cy="36" r="6" stroke="currentColor" stroke-width="3"/>
+            <circle cx="55" cy="36" r="6" stroke="currentColor" stroke-width="3"/>
+            <path d="M23 36h10M39 36h10" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+            <path d="M32 28l8 16" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <svg class="presence__symbol presence__symbol--error" viewBox="0 0 72 72" fill="none">
+            <path d="M36 10 65 61H7L36 10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/>
+            <path d="M36 27v17" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/>
+            <circle cx="36" cy="52" r="2.3" fill="currentColor"/>
+          </svg>
+        </div>
+
+        <p class="presence__phase" data-field="phase">Offline</p>
+        <p class="presence__transcript" data-field="transcript"></p>
+        <p class="presence__reply" data-field="reply"></p>
+        <p class="presence__activity" data-field="activity"></p>
+      </div>
+
+      <div class="presence__stitch">
+        <i></i><i></i><i></i>
+      </div>
+    </section>
+
+    <div id="presenceAnnouncement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true">Franky is offline.</div>
+  </main>
+</body>
+</html>

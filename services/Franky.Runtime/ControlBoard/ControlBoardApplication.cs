@@ -27,6 +27,11 @@ public static class ControlBoardApplication
         {
             throw new DirectoryNotFoundException($"Franky control-board files were not found at '{webRoot}'.");
         }
+        var presenceRoot = Path.GetFullPath(Path.Combine(webRoot, "..", "franky-presence"));
+        if (!Directory.Exists(presenceRoot))
+        {
+            throw new DirectoryNotFoundException($"Franky Presence files were not found at '{presenceRoot}'.");
+        }
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.WebHost.UseUrls($"http://127.0.0.1:{port}");
@@ -45,8 +50,19 @@ public static class ControlBoardApplication
 
         var app = builder.Build();
         var fileProvider = new PhysicalFileProvider(Path.GetFullPath(webRoot));
+        var presenceFileProvider = new PhysicalFileProvider(presenceRoot);
         app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = fileProvider });
         app.UseStaticFiles(new StaticFileOptions { FileProvider = fileProvider });
+        app.UseDefaultFiles(new DefaultFilesOptions
+        {
+            FileProvider = presenceFileProvider,
+            RequestPath = "/presence",
+        });
+        app.UseStaticFiles(new StaticFileOptions
+        {
+            FileProvider = presenceFileProvider,
+            RequestPath = "/presence",
+        });
 
         app.MapGet("/api/transcriptions/status", (ISpeechTranscriber transcriber) =>
             Results.Ok(transcriber.Status));

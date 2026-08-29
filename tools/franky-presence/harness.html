@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Franky Presence — development harness</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="harness.css?v=1">
+  <script src="mock-events.js?v=1" defer></script>
+  <script src="harness.js?v=1" defer></script>
+</head>
+<body>
+  <header class="harness-header">
+    <div>
+      <p class="eyebrow">Development only · controls stay outside the presence page</p>
+      <h1>Franky Presence harness</h1>
+    </div>
+    <p id="harnessStatus" class="harness-status" role="status">Waiting for the passive display.</p>
+  </header>
+
+  <section class="harness-controls" aria-label="Deterministic mock controls">
+    <div class="control-row" role="group" aria-label="Choose a mock state">
+      <button type="button" data-event="offline">Offline</button>
+      <button type="button" data-event="idle">Idle</button>
+      <button type="button" data-event="listening">Listening</button>
+      <button type="button" data-event="transcribing">Transcribing</button>
+      <button type="button" data-event="processing">Processing</button>
+      <button type="button" data-event="acting">Acting</button>
+      <button type="button" data-event="speaking">Speaking</button>
+      <button type="button" data-event="privacy">Privacy</button>
+      <button type="button" data-event="error">Error</button>
+      <button type="button" data-event="long">Long reply</button>
+    </div>
+    <div class="control-options">
+      <label><input id="autoPlay" type="checkbox"> Auto-play lifecycle</label>
+      <label><input id="reducedMotion" type="checkbox"> Simulate reduced motion</label>
+    </div>
+  </section>
+
+  <main class="display-frame">
+    <iframe id="presenceFrame" title="Franky Presence passive display" src="index.html?source=harness"></iframe>
+  </main>
+</body>
+</html>

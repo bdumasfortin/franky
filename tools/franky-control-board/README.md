@@ -27,6 +27,13 @@ board returns `SFX_DONE`. Common short wording and contraction variants are
 matched locally before Ollama so the signature response is not dependent on a
 probabilistic tool choice.
 
+The same loopback service serves **Franky Presence** at `/presence/`. Choose
+**Presence ↗** from the control board to open the passive, room-readable page.
+While this USB control tab is open, it publishes ephemeral lifecycle snapshots
+to that page over a same-origin browser channel. The passive page has no serial
+access, commands, settings, or stored conversation history and goes offline
+within 3.5 seconds if the control tab stops publishing.
+
 ## Run
 
 1. Flash `firmware/franky-device` to the board.
@@ -41,7 +48,8 @@ probabilistic tool choice.
    trailing silence, shows the local transcript, and processes it as an
    assistant turn. Try “What version of .NET are you running?” or “Which user
    account are you running as?” Ask “How is it going?” to request the embedded
-   Franky clip. Use the Audio area for manual recordings.
+   Franky clip. Open **Presence ↗** to observe the same live lifecycle in a
+   separate passive page. Use the Audio area for manual recordings.
 
 Manual clips remain in browser memory unless downloaded. Wake clips are
 discarded after transcription and transcript text is not persisted. Audio stays
