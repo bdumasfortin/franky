@@ -146,6 +146,7 @@ const hardNegativePrompts = [
   'We should try that again.',
   'No assistant invocation in this sentence.',
 ];
+const presenceFeed = window.FrankyPresenceFeed;
 
 let port;
 let reader;
@@ -155,11 +156,13 @@ let audioHeader;
 let recordingContext;
 let countdownTimer;
 let heartbeatTimer;
+let reconnectTimer;
 let wakePulseTimer;
 let transcriptStateTimer;
 let transcriptionStatusTimer;
 let assistantStatusTimer;
 let heartbeatInFlight = false;
+let connectionAttemptInFlight = false;
 let disconnecting = false;
 let terminalPaused = false;
 let transcriptionInFlight = false;
@@ -500,6 +503,7 @@ function setConnection(connected, { announce = true } = {}) {
     els.wakeStatus.textContent = `Listening for “${wakeProfile.phraseLabel}”`;
     setCaptureStatus('Ready', '16 kHz · 16-bit · raw stereo');
     setSystemState('idle', { announce });
+    presenceFeed.setReady();
     void refreshTranscriptionStatus();
     void refreshAssistantStatus();
   } else {
@@ -516,6 +520,7 @@ function setConnection(connected, { announce = true } = {}) {
     els.assistantStatus.textContent = 'Offline';
     setCaptureStatus('Offline', 'Connect to Franky to begin');
     setSystemState('offline', { announce: false });
+    presenceFeed.setOffline();
     clearTimeout(transcriptionStatusTimer);
     transcriptionStatusTimer = undefined;
     clearTimeout(assistantStatusTimer);
@@ -695,6 +700,7 @@ function handleLine(line) {
     setSystemState('speaking');
     setCaptureStatus('Speaking', 'Franky is playing the requested sound');
     els.wakeStatus.textContent = 'Franky is speaking…';
+    presenceFeed.update({ phase: 'speaking', activity: 'Speaking' });
     appendTerminal('ACTION', `${sfxName} · playing`, 'action-line');
     return;
   }
@@ -734,6 +740,7 @@ function handleLine(line) {
     els.recordButton.disabled = true;
     els.stopButton.disabled = true;
     for (const button of els.stateButtons) button.disabled = true;
+    presenceFeed.beginTurn();
     setSystemState('success');
     setCaptureStatus('Wake word detected', 'Waiting for your voice');
     appendTerminal('WAKE', `Detected “${wakeProfile.phraseLabel}” · waiting for speech`);
@@ -747,6 +754,7 @@ function handleLine(line) {
     els.wakeStatus.textContent = 'Listening…';
     els.wakeCaptureMode.textContent = 'Listening until silence';
     setCaptureStatus('Listening', 'Speak naturally · Franky stops when you finish');
+    presenceFeed.update({ phase: 'listening', activity: 'Listening' });
     setSystemState('listening');
     appendTerminal('WAKE', 'Listening for one complete utterance');
     return;
@@ -757,6 +765,7 @@ function handleLine(line) {
     els.wakeStatus.textContent = 'Transcribing locally…';
     els.wakeCaptureMode.textContent = 'Utterance captured';
     setCaptureStatus('Processing', reason === 'max_duration' ? '20-second safety cap reached' : 'Speech ended naturally');
+    presenceFeed.update({ phase: 'transcribing', activity: 'Transcribing' });
     setSystemState('processing');
     appendTerminal('WAKE', reason === 'max_duration' ? 'Speech capture reached its safety cap' : 'Speech ended · local transcription next');
     return;
@@ -769,6 +778,7 @@ function handleLine(line) {
     els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
     els.transcriptMeta.textContent = 'Latest wake contained no speech';
     setCaptureStatus('Ready', 'No speech followed the wake word');
+    presenceFeed.setReady({ transcript: null, reply: null });
     setSystemState('idle');
     appendTerminal('WAKE', 'Nothing heard after the wake word');
     return;
@@ -835,6 +845,7 @@ function handleLine(line) {
       pending.reject(new Error(message));
     }
     setSystemState('error');
+    presenceFeed.setError(message);
     setCaptureStatus('Board error', message);
     appendTerminal('ERROR', message, 'error-line');
     return;
@@ -930,17 +941,21 @@ function startHeartbeat() {
   }, 1000);
 }
 
-async function connect() {
-  if (!('serial' in navigator)) return;
+async function connect(preauthorizedPort) {
+  if (!('serial' in navigator) || port || disconnecting || connectionAttemptInFlight) return;
 
+  connectionAttemptInFlight = true;
+  const reconnecting = Boolean(preauthorizedPort);
   els.connectButton.disabled = true;
-  els.connectButton.textContent = 'Connecting…';
+  els.connectButton.textContent = reconnecting ? 'Reconnecting…' : 'Connecting…';
   try {
-    port = await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
+    port = preauthorizedPort ?? await navigator.serial.requestPort({ filters: [{ usbVendorId: 0x303a }] });
     await port.open({ baudRate: 115200, bufferSize: 65536 });
     writer = port.writable.getWriter();
     readBuffer = new Uint8Array();
-    appendTerminal('LINK', 'Opening USB serial connection');
+    appendTerminal('LINK', reconnecting
+      ? 'Reopening authorized USB serial connection'
+      : 'Opening USB serial connection');
     void readLoop();
     await new Promise(resolve => setTimeout(resolve, 250));
     await sendCommand('HELLO');
@@ -949,10 +964,29 @@ async function connect() {
     if (port) await disconnect({ notifyBoard: false, reason: 'Connection attempt ended' });
     else setConnection(false, { announce: false });
   } finally {
+    connectionAttemptInFlight = false;
     if (!isConnected()) {
       els.connectButton.disabled = false;
       els.connectButton.textContent = 'Connect to Franky';
     }
+  }
+}
+
+function frankyPortFromEvent(event) {
+  const candidate = event.port ?? event.target;
+  if (typeof candidate?.getInfo !== 'function') return null;
+  return candidate.getInfo().usbVendorId === 0x303a ? candidate : null;
+}
+
+async function reconnectAuthorizedPort() {
+  if (!navigator.serial || port || disconnecting || connectionAttemptInFlight) return;
+  try {
+    const authorizedPorts = await navigator.serial.getPorts();
+    const authorizedFranky = authorizedPorts.find(candidate =>
+      candidate.getInfo().usbVendorId === 0x303a);
+    if (authorizedFranky) await connect(authorizedFranky);
+  } catch (error) {
+    appendTerminal('ERROR', `Could not reopen authorized USB serial connection · ${error.message}`, 'error-line');
   }
 }
 
@@ -1230,6 +1264,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
   setCaptureStatus('Processing', 'Transcribing locally on this computer');
   els.wakeStatus.textContent = 'Transcribing locally…';
   els.wakeCaptureMode.textContent = 'Local Whisper is processing';
+  presenceFeed.update({ phase: 'transcribing', activity: 'Transcribing' });
 
   try {
     let transcription;
@@ -1249,6 +1284,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
       els.wakeCaptureMode.textContent = 'Local transcription needs attention';
       setCaptureStatus('Transcription failed', error.message);
       setSystemState('error');
+      presenceFeed.setError(error.message);
       appendTerminal('ERROR', `Could not transcribe speech · ${error.message}`, 'error-line');
       void refreshTranscriptionStatus();
       return;
@@ -1263,6 +1299,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
       els.wakeCaptureMode.textContent = 'Natural endpointing enabled';
       setCaptureStatus('Ready', 'The clip did not contain recognizable speech');
       appendTerminal('HEARD', 'No recognizable speech in the utterance');
+      presenceFeed.setReady({ transcript: null, reply: null });
       setSystemState('idle');
       return;
     }
@@ -1282,6 +1319,7 @@ async function transcribeWakeUtterance(wave, durationSeconds) {
       els.wakeCaptureMode.textContent = 'The transcript was understood; the assistant turn failed';
       setCaptureStatus('Assistant failed', error.message);
       setSystemState('error');
+      presenceFeed.setError(error.message);
       appendTerminal('ERROR', `Could not process the request · ${error.message}`, 'error-line');
       void refreshAssistantStatus();
     }
@@ -1298,6 +1336,12 @@ async function processAssistantTurn(transcript, sequence) {
   setCaptureStatus('Understanding', 'Matching the request to Franky’s named capabilities');
   els.wakeStatus.textContent = 'Franky is thinking…';
   els.wakeCaptureMode.textContent = 'Model-selected command routing';
+  presenceFeed.update({
+    phase: 'processing',
+    transcript,
+    reply: null,
+    activity: 'Preparing a response',
+  });
   appendTerminal('INTENT', 'Selecting an allowlisted capability', 'intent-line');
 
   const response = await fetch('/api/assistant/turns', {
@@ -1310,6 +1354,7 @@ async function processAssistantTurn(transcript, sequence) {
   if (sequence !== transcriptionSequence || !isConnected()) return;
 
   const actions = Array.isArray(result.actions) ? result.actions : [];
+  const reply = String(result.text || '').trim() || 'Request completed without a text response.';
   let actionFailed = false;
   for (const action of actions) {
     const name = String(action.name || 'unknown action');
@@ -1323,6 +1368,12 @@ async function processAssistantTurn(transcript, sequence) {
       }
 
       appendTerminal('ACTION', `${name} · requested`, 'action-line');
+      presenceFeed.update({
+        phase: 'acting',
+        transcript,
+        reply,
+        activity: 'Sending Franky’s response to the speaker',
+      });
       try {
         await playDeviceSfx(FRANKY_SUUUPER_SFX);
         appendTerminal('ACTION', `${name} · success`, 'action-line');
@@ -1342,7 +1393,6 @@ async function processAssistantTurn(transcript, sequence) {
 
   if (sequence !== transcriptionSequence || !isConnected()) return;
 
-  const reply = String(result.text || '').trim() || 'Request completed without a text response.';
   els.lastReply.textContent = reply;
   els.assistantMeta.textContent =
     `${result.provider || 'Franky'} · ${actions.length} named action${actions.length === 1 ? '' : 's'}`;
@@ -1351,6 +1401,8 @@ async function processAssistantTurn(transcript, sequence) {
   setCaptureStatus('Request complete', 'Wake audio was discarded after local transcription');
   appendTerminal('FRANKY', reply, 'assistant-line');
 
+  if (actionFailed) presenceFeed.setError('A named action failed');
+  else presenceFeed.setReady({ transcript, reply });
   setSystemState(actionFailed ? 'error' : 'success');
   clearTimeout(transcriptStateTimer);
   transcriptStateTimer = setTimeout(() => {
@@ -1512,12 +1564,26 @@ els.terminalClearButton.addEventListener('click', () => {
   els.terminalLog.replaceChildren();
 });
 
+navigator.serial?.addEventListener('connect', event => {
+  const reconnectedPort = frankyPortFromEvent(event);
+  if (!reconnectedPort || reconnectedPort === port) return;
+  clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => {
+    if (!port && !disconnecting) void connect(reconnectedPort);
+  }, 350);
+});
+
 navigator.serial?.addEventListener('disconnect', event => {
-  if (event.target === port) void disconnect({ notifyBoard: false, reason: 'Franky disconnected unexpectedly' });
+  const disconnectedPort = frankyPortFromEvent(event);
+  if (disconnectedPort === port) {
+    void disconnect({ notifyBoard: false, reason: 'Franky disconnected unexpectedly' });
+  }
 });
 
 window.addEventListener('beforeunload', () => {
   stopHeartbeat();
+  clearTimeout(reconnectTimer);
+  presenceFeed.dispose();
   for (const url of objectUrls) URL.revokeObjectURL(url);
   if (datasetReviewUrl) URL.revokeObjectURL(datasetReviewUrl);
 });
@@ -1529,6 +1595,7 @@ appendTerminal('SYSTEM', 'Franky control board loaded · waiting for connection'
 void refreshTranscriptionStatus();
 void refreshAssistantStatus();
 void refreshWakeDataset();
+void reconnectAuthorizedPort();
 
 if (!('serial' in navigator)) {
   els.connectButton.disabled = true;

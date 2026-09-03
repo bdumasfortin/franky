@@ -38,6 +38,9 @@ recognition, conversation, and safe command execution.
 > transport and generated spoken answers remain ahead. A provider-neutral,
 > cancellable local TTS boundary is implemented and tested, but no engine or
 > Franky voice has been selected and no generated audio reaches the board yet.
+> The passive **Franky
+> Presence** page now receives the truthful USB-session lifecycle from the open
+> control-board tab; a runtime-owned feed remains ahead.
 
 ## What works today
 
@@ -67,6 +70,10 @@ recognition, conversation, and safe command execution.
 - A provider-neutral speech-synthesis contract with bounded board-compatible
   PCM output, single-flight execution, cooperative cancellation, and
   metadata-only diagnostics; production synthesis and playback remain pending.
+- A passive Franky Presence display for the latest transcript, reply, and
+  truthful lifecycle activity, with privacy, offline, error, narrow-screen, and
+  reduced-motion presentations. The current live source is the control-board
+  browser tab; deterministic mock states remain available in its test harness.
 
 ## How it fits together
 
@@ -85,6 +92,11 @@ ESP32-S3 board ── USB serial today / Wi-Fi later ──> Franky runtime
 The browser control board is intentionally a development tool. The intended
 room setup uses Wi-Fi between the ESP32 and the computer, with USB retained for
 power, flashing, and diagnostics.
+
+Franky Presence is a separate passive display rather than a second control
+surface. In the current USB architecture, the control-board tab publishes its
+authoritative device and turn state over an ephemeral same-origin browser
+channel. The eventual runtime-owned, one-way display feed remains planned.
 
 ## Try the control board
 
@@ -120,6 +132,16 @@ cloud provider is selected, transcript text crosses that provider boundary.
 See the [control-board guide](tools/franky-control-board/README.md) for the full
 testing flow and [firmware guide](firmware/README.md) for board setup.
 
+## Try the passive presence page
+
+Start the control board normally, then choose **Presence ↗** or open
+`http://127.0.0.1:8765/presence/`. Keep the control-board tab open so it can
+publish the current USB lifecycle. The presence page itself contains no
+commands or settings; `harness.html` provides separate deterministic controls.
+
+See the [Franky Presence guide](tools/franky-presence/README.md) for the exact
+launch command, fixed-state queries, current limitations, and privacy boundary.
+
 ## Develop the runtime
 
 Build and run the automated checks:
@@ -149,6 +171,7 @@ not an application credential. Setup and privacy details live in the
 | [`firmware/franky-device/`](firmware/franky-device/) | ESP32 firmware for microphones, wake detection, embedded audio, speaker cues, and LEDs |
 | [`services/Franky.Runtime/`](services/Franky.Runtime/) | Computer-hosted .NET runtime and local transcription service |
 | [`tools/franky-control-board/`](tools/franky-control-board/) | Local browser interface for developing and testing Franky |
+| [`tools/franky-presence/`](tools/franky-presence/) | Passive always-open display, served by the control-board app with a separate deterministic harness |
 | [`tools/wake-word/`](tools/wake-word/) | Reproducible local training workspace for “Yo Franky” |
 | [`tests/Franky.Runtime.Tests/`](tests/Franky.Runtime.Tests/) | Runtime and safety-boundary checks |
 | [`docs/`](docs/) | Product, architecture, development, and decision documentation |

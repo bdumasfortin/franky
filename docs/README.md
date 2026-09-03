@@ -12,6 +12,7 @@ the authoritative history for consequential choices.
 | [Architecture overview](architecture/overview.md) | Responsibilities of the ESP32 and computer runtime |
 | [Implementation plan](plan/v1-implementation.md) | Completed increments, active work, and deferred scope |
 | [Spoken-loop roadmap](plan/spoken-loop-roadmap.md) | Approved seven-step sequence and the separate passive-display track |
+| [Franky Presence design](design/franky-presence.md) | Research synthesis, design principles, explored directions, and approved visual language |
 | [Development workflow](development/workflow.md) | Local setup, validation, secrets, and evidence expectations |
 | [Hardware bring-up](../firmware/hardware-bring-up.md) | Evidence collected from the physical Waveshare board |
 
@@ -19,6 +20,8 @@ the authoritative history for consequential choices.
 
 - [Franky control board](../tools/franky-control-board/README.md) — run the
   browser interface and exercise audio, LEDs, wake detection, and transcription.
+- [Franky Presence](../tools/franky-presence/README.md) — run the passive live
+  display or its deterministic development harness.
 - [Firmware](../firmware/README.md) — understand and flash the ESP32-side project.
 - [Wake-word training](../tools/wake-word/README.md) — generate the local “Yo
   Franky” model used by custom firmware builds.
@@ -37,6 +40,7 @@ the authoritative history for consequential choices.
 - [Architecture overview](architecture/overview.md)
 - [Device protocol v1](architecture/device-protocol-v1.md)
 - [USB response-audio v6 proposal](architecture/response-audio-usb-v6-proposal.md)
+- [Provisional presence display event](architecture/presence-display-event.md)
 - [Architecture Decision Records](adr/README.md)
 
 ## Product
@@ -49,6 +53,10 @@ the authoritative history for consequential choices.
 - [Version 1 implementation plan](plan/v1-implementation.md)
 - [Spoken-loop roadmap](plan/spoken-loop-roadmap.md)
 - [Local TTS and voice evaluation](plan/tts-voice-evaluation.md)
+
+## Design
+
+- [Franky Presence design direction](design/franky-presence.md)
 
 ## Documentation conventions
 

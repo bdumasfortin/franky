@@ -43,6 +43,13 @@ board returns `SFX_DONE`. Common short wording and contraction variants are
 matched locally before Ollama so the signature response is not dependent on a
 probabilistic tool choice.
 
+The same loopback service serves **Franky Presence** at `/presence/`. Choose
+**Presence ↗** from the control board to open the passive, room-readable page.
+While this USB control tab is open, it publishes ephemeral lifecycle snapshots
+to that page over a same-origin browser channel. The passive page has no serial
+access, commands, settings, or stored conversation history and goes offline
+within 3.5 seconds if the control tab stops publishing.
+
 ## Run
 
 1. Flash `firmware/franky-device` to the board.
@@ -52,12 +59,16 @@ probabilistic tool choice.
    starts the .NET control-board service on loopback. The first run downloads
    the `small.en` Whisper model (roughly 466 MiB) to `%LOCALAPPDATA%\Franky\models`.
 4. In the Chromium-based page that opens, choose **Connect to Franky** and select the Espressif USB serial device.
+   After that first authorization, the page attempts to reopen the same
+   Espressif port automatically after a physical unplug/replug or page reload.
+   If automatic reopen fails, choose **Connect to Franky** again.
 5. Say the phrase shown in the Wake area—**“Yo Franky”** on the current custom
    build—wait for the acknowledgement, and speak naturally. Franky stops after
    trailing silence, shows the local transcript, and processes it as an
    assistant turn. Try “What version of .NET are you running?” or “Which user
    account are you running as?” Ask “How is it going?” to request the embedded
-   Franky clip. Use the Audio area for manual recordings.
+   Franky clip. Open **Presence ↗** to observe the same live lifecycle in a
+   separate passive page. Use the Audio area for manual recordings.
 
 For sensitivity diagnosis, open **Wake**, enable **Show near misses**, and leave
 the cutoff at 96% for the first set of attempts. Record every reported peak,

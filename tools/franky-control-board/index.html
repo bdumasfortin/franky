@@ -9,7 +9,10 @@
 <body>
   <main id="appRoot" class="app-frame" data-state="offline" data-connected="false">
     <section class="offline-app" aria-label="Franky is offline">
-      <div class="offline-indicator"><i class="state-dot"></i><span>Offline</span></div>
+      <div class="offline-indicator">
+        <i class="state-dot"></i><span>Offline</span>
+        <a class="presence-link" href="/presence/" target="_blank" rel="noopener">Presence ↗</a>
+      </div>
       <button id="connectButton" class="offline-connect" type="button">Connect to Franky</button>
     </section>
 
@@ -226,6 +229,7 @@
           <div class="module-head">
             <span>Franky output</span>
             <span class="terminal-actions">
+              <a class="presence-link" href="/presence/" target="_blank" rel="noopener">Presence ↗</a>
               <button id="terminalPauseButton" type="button">Pause</button>
               <button id="terminalClearButton" type="button">Clear</button>
               <button id="disconnectButton" class="disconnect-control" type="button">Disconnect</button>
@@ -252,6 +256,7 @@
     </article>
   </template>
 
-  <script src="app.js?v=20260827-dataset1"></script>
+  <script src="presence-feed.js?v=20260903-merged1"></script>
+  <script src="app.js?v=20260903-merged1"></script>
 </body>
 </html>

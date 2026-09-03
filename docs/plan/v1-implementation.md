@@ -65,6 +65,12 @@ generation.
   playback, low perceived latency, and truthful status after successful wakes.
   The same check found the custom wake phrase extremely unreliable, sometimes
   requiring about ten repetitions at roughly 20 inches in a quiet room.
+- The design-led Franky Presence track produced an approved Phase Stitch visual
+  direction and a passive page served by the control-board app. The current USB
+  lifecycle, latest transcript, reply, and confirmed device playback state flow
+  ephemerally from the control-board tab. Privacy, offline, error, long-copy,
+  narrow-screen, reduced-motion, disconnect, and deterministic harness states
+  are implemented without giving the passive page controls or serial access.
 
 ## Active vertical slice
 
@@ -105,9 +111,11 @@ acknowledged, cancellable response audio; play replies over USB; add semantic
 earcons and universal stop; improve conversational delivery; then move device
 ownership into the runtime and complete authenticated, headless operation.
 
-Implementation stops before shared lists and media integrations. A separate
-passive-display track is mocked against a read-only event contract and does not
-own device or assistant actions.
+Implementation stops before shared lists and media integrations. The separate
+passive-display track now has an implemented read-only browser feed and does not
+own device or assistant actions. Once the runtime owns complete device and
+session truth, replace that interim channel with a runtime-owned one-way feed
+and accept or supersede the provisional presence-display event contract.
 
 ## Validation gates
 
