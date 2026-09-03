@@ -17,6 +17,8 @@ The board's USB, factory-boot, microphone, speaker, LED, wake-word, and voice-ac
   score diagnostics over USB without transmitting or storing room audio;
 - exposes a deliberate 0.5–5 second diagnostic capture of the exact processed
   mono stream used by custom wake inference, for private local dataset work;
+- scores every byte of that deliberate capture with the embedded preprocessor
+  and model, reporting a peak that can be compared with the offline evaluator;
 - explicitly enables the NS4150B speaker amplifier through TCA9555 expander
   pin 8 on every boot, then plays connection, disconnection, and wake
   acknowledgement cues;
@@ -39,6 +41,27 @@ miss rate is therefore unacceptable and is now an active tuning problem. A
 diagnostic image implementing temporary cutoff changes and peak-score reporting
 has been built, flashed, and verified through direct USB acknowledgements. Its
 physical detection behavior still requires user observation.
+
+The matched-sample image is also built and flashed. It advertises
+`wake_sample_score`; a memory-only 0.5-second request returned a 3% embedded
+peak, all 16,000 declared post-AFE bytes, and `END`, after which `INFO` confirmed
+the 96% default and normal responsiveness. The scorer now runs only after the
+complete capture is frozen, avoiding concurrent model access. Three corrected
+spoken captures matched the offline evaluator exactly at 100/100, 100/100, and
+91/91. The flashed 1,159,520-byte image has SHA-256
+`CC4DB011B6E2B59DFFA504B0870D2364EFAB01A0D9A9CA75D268E7C3D789A97D`.
+
+Candidate v2 was later selected for a pragmatic user trial before formal fresh-
+session acceptance. Its 62,304-byte model has SHA-256
+`c984044357726ebe9ea92074614049363b2cef3fc704fac3738addb76008dc5c`.
+The rebuilt 1,159,520-byte application image has SHA-256
+`5a67954200fd285ef32547d6e2f813c8e7747a42fdb8739e0fc3221148baa837`.
+It was flashed over COM5 with every written image verified, reset, and observed
+through the reconnected control board with microWakeWord armed for “Yo Franky”
+at 96%. The September 3 user trial then reported roughly one successful wake in
+five and the activation beep appearing in every successful transcript. Both
+defects remain open; the original model is retained locally for rollback. See
+the [session handoff](../docs/development/session-handoff-2026-09-03.md).
 
 The named-SFX image builds, fits the current application partition, and is
 flashed on the board. A direct command returned both `SFX_START` and `SFX_DONE`;

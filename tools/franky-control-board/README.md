@@ -29,7 +29,10 @@ anything is written. **Discard and retry** writes nothing. Kept WAV files and
 metadata sidecars remain under the ignored
 `tools/wake-word/.cache/recordings` directory; individual and confirmed
 whole-dataset deletion are available. The collector does not transcribe,
-upload, or automatically train on these samples.
+upload, or automatically train on these samples. Once the 30/20 corpus target
+is complete, the same surface switches to parity prompts. New diagnostic
+firmware reports an embedded peak for the exact exported bytes; kept parity
+samples are labeled separately and do not change corpus progress.
 
 After a non-empty wake transcript, the same loopback service now sends the text
 through Franky's conversation provider. Model tool calls remain constrained to
@@ -84,11 +87,29 @@ cross the cloud boundary described in the
 [OpenAI development notes](../../docs/development/openai-api.md).
 
 The first approved wake corpus of 30 positives and 20 hard negatives has been
-collected through the guided prompts and evaluated locally. At the current 96%
-cutoff, the deployed model detected 25 positives and activated on five hard
-negatives; no tested 50–99% cutoff separated the classes. The separate
+collected through the guided prompts and evaluated locally. At the 96% cutoff,
+the original baseline detected 25 positives and activated on five hard
+negatives; no tested 50–99% cutoff separated the classes. Candidate v2 is now
+flashed but failed the user trial: roughly one wake in five and an activation
+beep appearing in every successful transcript. See the
+[session handoff](../../docs/development/session-handoff-2026-09-03.md).
+The separate
 [wake-word collection guide](../../docs/development/wake-word-data-collection.md)
 documents privacy, the complete score table, and the retraining gate.
+
+Only one control-board page can own the USB serial port. If connection fails,
+disconnect or close any other Franky control tab (including in external Chrome)
+and any serial monitor. The September 3 connection failure was resolved by
+closing a second Chrome page that held COM5. `serve.ps1` opens the default
+browser automatically; avoid also opening a second controlling page. The
+Connect click handler now calls `connect()` without passing its click event as
+a SerialPort.
+
+For the parity gate, flash firmware that advertises `wake_sample_score`, then
+keep representative positive and hard-negative parity samples. Rerun the local
+evaluator; it reports the board/offline delta for every parity sidecar that has
+an embedded score. These temporary evidence samples are never included in the
+30/20 corpus summary.
 
 Switch modes explicitly when needed:
 

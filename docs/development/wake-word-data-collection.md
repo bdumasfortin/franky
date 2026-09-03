@@ -1,6 +1,6 @@
 # Wake-Word Data Collection and Evaluation
 
-Status: **First spoken corpus collected and evaluated; current model fails the gate**
+Status: **Candidate v2 failed the practical trial; investigation paused**
 
 ## Purpose
 
@@ -82,9 +82,17 @@ recall and hard-negative activation counts from 50% through 99%. It writes its
 private JSON report to `.cache/evaluation/latest.json`.
 
 Short negative clips support activation counts only. They do not establish
-false activations per hour. Python-versus-board score parity also remains an
-explicit validation item even though both paths use the same feature and
-post-processing parameters.
+false activations per hour. Python-versus-board score parity was verified on the
+corrected matched samples described below.
+
+After the corpus target is complete, the control board presents dedicated
+positive and hard-negative parity prompts. Firmware with `wake_sample_score`
+first freezes the complete post-AFE capture, then resets and runs the embedded
+preprocessor/model over those exact bytes before emitting
+`WAKE_SAMPLE_SCORE <peak_percent>` and returning the same buffer.
+If the user reviews and keeps the clip, the sidecar records `purpose: parity`
+and the embedded score. Parity samples remain visible and individually
+deletable, but do not change the 30/20 progress or corpus evaluation totals.
 
 ## First corpus result — August 27, 2026
 
@@ -124,17 +132,107 @@ most three positives and increases hard-negative activations; raising it loses
 four more positives while still accepting four hard negatives. Keep the flashed
 default at 96% until a replacement model passes its own evidence gates.
 
+## Matched-score parity result — September 3, 2026
+
+The first three spoken measurements all reported 100% onboard, but inspection
+found that the diagnostic reset and inference could overlap a normal wake
+inference already in flight. Those WAVs remain in private storage, while their
+sidecars mark the board measurements invalid so the evaluator excludes them.
+
+The firmware was corrected to capture first and score the frozen buffer only
+after normal wake detection was disarmed. The rebuilt 1,159,520-byte image has
+SHA-256 `CC4DB011B6E2B59DFFA504B0870D2364EFAB01A0D9A9CA75D268E7C3D789A97D`.
+It was flashed to the physical board, and the user repeated the same three
+samples:
+
+| Spoken sample | Orientation | Board | Offline | Delta |
+| --- | --- | ---: | ---: | ---: |
+| “Yo Franky” | Facing | 100% | 100% | 0 |
+| “Yo Franky” | Side-on | 100% | 100% | 0 |
+| “Yo friendly people” | Facing | 91% | 91% | 0 |
+
+All three corrected measurements match exactly. This verifies that the offline
+evaluator reproduces the deployed board scoring path for these representative
+captures. It does not make the three-sample set a reliability evaluation, and
+the 91% hard-negative result remains evidence of inadequate class separation.
+
+## Physical candidate result — September 3, 2026
+
+The approved 30/20 corpus was converted into training-only feature maps after
+validating every sidecar, WAV format, hash, capture-pipeline label, and duplicate
+hash. Samples labeled `purpose: parity` were excluded. Generated features,
+checkpoints, reports, and models remain in ignored local storage. Both candidate
+runs began from the deployed model's checkpoint and wrote to isolated output
+directories; neither replaced or flashed the deployed model during training.
+
+The first candidate recovered all 30 positive training samples at every tested
+cutoff, but still activated on 5/20 hard negatives at 96%. It also pushed the
+single-word hard negative “Frankly” from 9% to 100%, so it was rejected rather
+than flashed.
+
+Candidate v2 aligns the spoken region before augmenting hard negatives and gives
+those examples a stronger training penalty. Its quantized streaming model is
+62,304 bytes with SHA-256
+`c984044357726ebe9ea92074614049363b2cef3fc704fac3738addb76008dc5c`.
+
+| Cutoff | Deployed positives | Candidate v2 positives | Deployed hard negatives | Candidate v2 hard negatives |
+| ---: | ---: | ---: | ---: | ---: |
+| 50% | 28/30 | 30/30 | 7/20 | 3/20 |
+| 60% | 28/30 | 30/30 | 6/20 | 3/20 |
+| 70% | 28/30 | 30/30 | 6/20 | 3/20 |
+| 80% | 28/30 | 30/30 | 6/20 | 3/20 |
+| 87% | 27/30 | 30/30 | 6/20 | 3/20 |
+| 92% | 25/30 | 30/30 | 6/20 | 2/20 |
+| 96% | 25/30 | 30/30 | 5/20 | 2/20 |
+| 99% | 21/30 | 30/30 | 4/20 | 2/20 |
+
+At 96%, candidate v2 still scores “You’re frankly mistaken” and “Yo friendly
+people” at 100%. “Yo Frankie boy” falls from 100% to 90%, “Yo Frank” from 100%
+to 39%, “Go Franky” from 100% to 8%, and “Hello Franky” from 95% to 4%.
+
+On the existing separate synthetic/ambient test set, the exported candidate
+reported 2.0% false rejection and 0.187 estimated false accepts per hour at its
+95% point. At 98%, it reported 3.33% false rejection and no observed false
+accepts. These results show that the bounded physical tuning did not simply
+discard the broader test, but they do not override the physical evidence gate.
+
+Candidate v2 is a **provisional candidate, not an accepted model**. Its improved
+physical scores reuse its training corpus and are useful only as a sanity check.
+The planned formal gate remains a fresh recording session whose audio has never
+contributed to training, scored offline against both the original baseline and
+candidate v2.
+
+The user explicitly chose to try candidate v2 before that formal gate because it
+may already be sufficient for this personal deployment. The 62,304-byte model
+was copied into the firmware, rebuilt, and flashed over COM5 on September 3.
+The flasher verified every written image and reset the board. The resulting
+1,159,520-byte application image has SHA-256
+`5a67954200fd285ef32547d6e2f813c8e7747a42fdb8739e0fc3221148baa837`.
+After the control board reconnected, it observed microWakeWord armed for “Yo
+Franky” at the 96% default. This verifies build, flash, boot, and initialization;
+that alone does not verify spoken reliability. The subsequent user trial
+reported roughly one wake in five and the activation beep appearing in every
+successful transcript. The exact baseline model remains in ignored training
+output for rollback. See the [session handoff](session-handoff-2026-09-03.md).
+
 ## Current verification evidence
 
-- **Built:** firmware with `wake_sample`, loopback storage API, browser Dataset
-  workflow, and offline evaluator.
-- **Automated:** Release build and 24 runtime tests pass; control-board
-  JavaScript parses successfully; the evaluator completed against one generated
-  canonical sample, which was deleted afterward.
+- **Built:** firmware with `wake_sample` and matched onboard scoring, loopback
+  storage API, browser corpus/parity workflow, and offline evaluator.
+- **Automated:** Release build and 24 runtime tests pass; control-board and
+  Presence JavaScript parse successfully; the evaluator completed against the
+  50-sample physical corpus without changing its recorded cutoff totals. It
+  reports three valid parity comparisons with exact matches and excludes three
+  explicitly invalid measurements from the earlier race-affected diagnostic.
 - **Protocol-tested:** the flashed board advertised `wake_sample`, returned
   exactly 32,000 bytes for a one-second 16 kHz mono capture, and remained at the
   96% default with diagnostics off. The flashed 1,159,296-byte application image
   has SHA-256 `82E9CCA086F940FAFC86536B1ACC0CC4E6E0EB0AF59A81F5C0A1EDF82731EAD9`.
+- **Matched-score protocol-tested:** the September 3 image advertised
+  `wake_sample_score`. A memory-only 0.5-second request reported a 3% embedded
+  peak, returned exactly 16,000 declared audio bytes, emitted `END`, and remained
+  responsive at the 96% default. The 1,159,536-byte application image has SHA-256
+  `498CD0C548E4898F270FC959193E0F3E3F7C363BCCEBEC7EF467B345CDEBFC61`.
 - **HTTP-tested:** an unauthorized write returned 401; an authorized canonical
   sample was saved, counted, deleted, and no longer counted.
 - **Browser-observed:** the connected control board recognized the new firmware
@@ -143,8 +241,17 @@ default at 96% until a replacement model passes its own evidence gates.
 - **Corpus-verified:** 50 unique hash-valid WAV/metadata pairs were evaluated;
   the full threshold results are recorded above and the detailed report remains
   in ignored local storage.
-- **Not yet observed:** exact board/Python score parity, an improved model, a
-  fresh-session acceptance corpus, or improved wake reliability.
+- **Physically parity-verified:** three corrected kept samples produced exact
+  board/Python score matches: 100/100, 100/100, and 91/91.
+- **Candidate-trained:** candidate v2 improved both physical classes on the
+  reused training corpus and retained viable separate synthetic/ambient results.
+- **Candidate-flashed:** the image was built, hash-verified during flashing,
+  reset, and observed booted with microWakeWord armed at 96%.
+- **User-observed failure:** candidate v2 detected roughly one wake in five;
+  the activation beep appeared in every successful transcript. Exact counts,
+  fresh audio, and current acoustic conditions were not recorded.
+- **Not yet established:** idle false-activation behavior, the causes of the
+  poor live detection and cue contamination, or a formal acceptance pass.
 
 ## Advancement gate
 
@@ -152,10 +259,12 @@ The current model has now been evaluated and its positive and hard-negative
 scores overlap materially. Threshold tuning is closed as a production option,
 and retraining with physical positives and hard negatives is justified.
 
-Before training, establish score parity on representative shared samples using
-the embedded board preprocessor and scorer. Preserve a declared split or,
-preferably, use a later recording session as the untouched acceptance set; all
-50 current recordings came from one session, so evaluating a candidate on data
-it trained against would not prove improved physical reliability. A candidate
-must then improve both positive recall and confusing-phrase rejection before it
-is flashed for repeated-wake and idle false-activation testing.
+The matched-score gate has passed with three exact board/Python matches, and
+candidate v2 passes the bounded training sanity check. All 50 current corpus
+recordings came from one session and contributed to candidate training, so they
+cannot prove improved physical reliability. The early trial flash was explicitly
+approved, but the subsequent user feedback rejects its practical reliability.
+First investigate the live inference path versus reset/frozen-clip scoring and
+the cue/capture boundary. A fresh, untouched comparison and live spoken/idle
+observations remain necessary before claiming improved reliability. Do not
+describe candidate v2 as accepted or train on acceptance data.

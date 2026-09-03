@@ -6,6 +6,10 @@ the authoritative history for consequential choices.
 
 ## Start here
 
+Current pause: [September 3 session handoff](development/session-handoff-2026-09-03.md)
+records candidate v2's failed practical trial, activation-cue contamination,
+the exact local state, and the next investigation.
+
 | Document | What it covers |
 | --- | --- |
 | [Product definition](product/v1.md) | The approved experience, boundaries, and success criteria |

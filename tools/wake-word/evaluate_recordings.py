@@ -36,6 +36,7 @@ DEFAULT_MODEL = (
 )
 DEFAULT_RECORDINGS = TOOL_ROOT / ".cache" / "recordings"
 DEFAULT_OUTPUT = TOOL_ROOT / ".cache" / "evaluation" / "latest.json"
+PARITY_MODEL_SHA256 = "987223a0697b9f8a382f6f00cc523026478ba99a21cef264e3686fd887b203dd"
 DEFAULT_THRESHOLDS = (50, 60, 70, 80, 87, 92, 96, 99)
 FEATURE_FRAMES_PER_INFERENCE = 3
 PROBABILITY_WINDOW = 5
@@ -55,12 +56,16 @@ from microwakeword.audio.audio_utils import generate_features_for_clip  # noqa: 
 class SampleResult:
     id: str
     category: str
+    purpose: str
     prompt_id: str
     distance: str
     orientation: str
     duration_ms: int
     peak_raw_average: float
     peak_percent: int
+    board_peak_score_percent: int | None
+    board_score_status: str
+    peak_score_delta: int | None
     threshold_crossings_ms: dict[str, int | None]
 
 
@@ -139,6 +144,7 @@ def score_sample(
     wave_path: Path,
     metadata: dict[str, object],
     thresholds: tuple[int, ...],
+    compare_board_score: bool,
 ) -> SampleResult:
     pcm, duration_ms = load_pcm(wave_path)
     predictions = raw_predictions(model_path, pcm)
@@ -147,7 +153,14 @@ def score_sample(
         for index in range(PROBABILITY_WINDOW - 1, len(predictions))
     ]
     peak_sum = max(rolling_sums, default=0)
-    peak_percent = round(peak_sum * 100 / PROBABILITY_SCALE)
+    peak_percent = (peak_sum * 100 + PROBABILITY_SCALE // 2) // PROBABILITY_SCALE
+    board_peak_value = metadata.get("boardPeakScorePercent")
+    board_peak_score = None if board_peak_value is None else int(board_peak_value)
+    if board_peak_score is not None and not 0 <= board_peak_score <= 100:
+        raise ValueError(f"Invalid board peak score in {wave_path.name} metadata.")
+    board_score_status = str(metadata.get("boardScoreStatus") or "valid")
+    if board_score_status not in ("valid", "invalid"):
+        raise ValueError(f"Invalid board score status in {wave_path.name} metadata.")
     crossings: dict[str, int | None] = {}
     for threshold in thresholds:
         crossing = next(
@@ -163,12 +176,20 @@ def score_sample(
     return SampleResult(
         id=str(metadata.get("id", wave_path.stem)),
         category=str(metadata.get("category", wave_path.parent.name)),
+        purpose=str(metadata.get("purpose") or "corpus"),
         prompt_id=str(metadata.get("promptId", "")),
         distance=str(metadata.get("distance", "")),
         orientation=str(metadata.get("orientation", "")),
         duration_ms=duration_ms,
         peak_raw_average=round(peak_sum / PROBABILITY_WINDOW, 2),
         peak_percent=peak_percent,
+        board_peak_score_percent=board_peak_score,
+        board_score_status=board_score_status,
+        peak_score_delta=(
+            peak_percent - board_peak_score
+            if compare_board_score and board_peak_score is not None
+            else None
+        ),
         threshold_crossings_ms=crossings,
     )
 
@@ -189,8 +210,9 @@ def read_samples(root: Path) -> list[tuple[Path, dict[str, object]]]:
 
 
 def summarize(results: list[SampleResult], thresholds: tuple[int, ...]) -> dict[str, object]:
-    positives = [result for result in results if result.category == "positive"]
-    negatives = [result for result in results if result.category == "hard-negative"]
+    corpus = [result for result in results if result.purpose == "corpus"]
+    positives = [result for result in corpus if result.category == "positive"]
+    negatives = [result for result in corpus if result.category == "hard-negative"]
     summary: dict[str, object] = {}
     for threshold in thresholds:
         key = str(threshold)
@@ -206,6 +228,32 @@ def summarize(results: list[SampleResult], thresholds: tuple[int, ...]) -> dict[
     return summary
 
 
+def summarize_parity(results: list[SampleResult]) -> dict[str, object]:
+    compared = [
+        result
+        for result in results
+        if result.purpose == "parity"
+        and result.board_peak_score_percent is not None
+        and result.board_score_status == "valid"
+        and result.peak_score_delta is not None
+    ]
+    excluded_invalid = sum(
+        result.purpose == "parity"
+        and result.board_peak_score_percent is not None
+        and result.board_score_status == "invalid"
+        and result.peak_score_delta is not None
+        for result in results
+    )
+    deltas = [abs(result.peak_score_delta or 0) for result in compared]
+    return {
+        "comparedSamples": len(compared),
+        "exactMatches": sum(delta == 0 for delta in deltas),
+        "withinOnePoint": sum(delta <= 1 for delta in deltas),
+        "maximumAbsoluteDelta": max(deltas, default=None),
+        "excludedInvalidMeasurements": excluded_invalid,
+    }
+
+
 def main() -> int:
     arguments = parse_arguments()
     thresholds = parse_thresholds(arguments.thresholds)
@@ -215,23 +263,42 @@ def main() -> int:
     if not model_path.is_file():
         raise FileNotFoundError(f"Wake model not found: {model_path}")
 
+    model_sha256 = hashlib.sha256(model_path.read_bytes()).hexdigest()
+    board_comparison_enabled = model_sha256 == PARITY_MODEL_SHA256
     samples = read_samples(recordings_root)
     results = [
-        score_sample(model_path, wave_path, metadata, thresholds)
+        score_sample(
+            model_path,
+            wave_path,
+            metadata,
+            thresholds,
+            compare_board_score=board_comparison_enabled,
+        )
         for wave_path, metadata in samples
     ]
+    parity_summary = summarize_parity(results)
+    parity_limitation = (
+        "Board scores were not compared because the selected model does not match the model used for the recorded parity samples."
+        if not board_comparison_enabled
+        else
+        "Board/Python score parity remains unverified until matched samples are captured."
+        if parity_summary["comparedSamples"] == 0
+        else "A small parity set validates the scoring path only; it does not establish wake reliability."
+    )
     report = {
-        "schemaVersion": 1,
+        "schemaVersion": 4,
         "evaluatedAtUtc": datetime.now(timezone.utc).isoformat(),
-        "modelSha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
+        "modelSha256": model_sha256,
         "capturePipeline": "afe_processed_mono_v1",
         "thresholds": thresholds,
         "sampleCount": len(results),
+        "boardScoreComparisonEnabled": board_comparison_enabled,
         "summary": summarize(results, thresholds),
+        "paritySummary": parity_summary,
         "samples": [asdict(result) for result in results],
         "limitations": [
             "Short hard-negative clips report activation counts, not false activations per hour.",
-            "Board/Python score parity remains unverified until one shared sample is scored on both runtimes.",
+            parity_limitation,
         ],
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -243,6 +310,19 @@ def main() -> int:
         print(
             f"{threshold}%: positives {item['positiveDetected']}/{item['positiveTotal']}; "
             f"hard-negative activations {item['hardNegativeActivations']}/{item['hardNegativeTotal']}"
+        )
+    parity = report["paritySummary"]
+    if not board_comparison_enabled:
+        print("Board/Python parity: comparison disabled for a different model hash")
+    elif parity["comparedSamples"] == 0:
+        print("Board/Python parity: no matched samples yet")
+    else:
+        print(
+            "Board/Python parity: "
+            f"{parity['comparedSamples']} compared; "
+            f"{parity['withinOnePoint']} within one point; "
+            f"maximum delta {parity['maximumAbsoluteDelta']}; "
+            f"{parity['excludedInvalidMeasurements']} invalid measurement(s) excluded"
         )
     print(f"Private report: {output_path}")
     return 0

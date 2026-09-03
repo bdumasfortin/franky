@@ -2,7 +2,7 @@
 
 Status: **USB development path verified; network and auxiliary hardware remain open**
 
-Observed on: **2026-08-26 and 2026-08-27**
+Observed on: **2026-08-26, 2026-08-27, and 2026-09-03**
 
 ## Physical sample
 
@@ -62,8 +62,31 @@ The exact Waveshare board revision therefore remains unresolved. The ESP32-S3 si
   corpus through the browser workflow. All 50 local WAV/metadata pairs passed
   integrity checks. Offline model scoring at the current 96% cutoff detected
   25/30 positives and activated on 5/20 hard negatives; no tested 50–99%
-  threshold separated the classes. Exact board-versus-evaluator score parity
-  remains unverified.
+  threshold separated the classes.
+- On 2026-09-03 a matched-score image was built and flashed. It advertised
+  `wake_sample_score`; a deliberate memory-only 0.5-second request reported a
+  3% embedded peak, returned all 16,000 declared post-AFE bytes, emitted `END`,
+  and remained responsive at the 96% default. This verifies the new framing and
+  recovery but did not alone establish board/offline score parity.
+- The first spoken parity set exposed concurrent diagnostic model access and was
+  marked invalid without deleting its private WAVs. Firmware was corrected to
+  score the exact frozen buffer after capture and flashed again. The user then
+  repeated two positive samples and one hard negative; board/offline peaks
+  matched exactly at 100/100, 100/100, and 91/91. The corrected 1,159,520-byte
+  image has SHA-256
+  `CC4DB011B6E2B59DFFA504B0870D2364EFAB01A0D9A9CA75D268E7C3D789A97D`.
+- The physically tuned candidate v2 model was flashed for an explicit user trial
+  on 2026-09-03 before formal fresh-session acceptance. The flasher verified all
+  writes and reset the board. The reconnected control board then reported
+  microWakeWord armed for “Yo Franky” at the 96% default. The 1,159,520-byte
+  application image has SHA-256
+  `5A67954200FD285EF32547D6E2F813C8E7747A42FDB8739E0FC3221148BAA837`.
+  The subsequent user trial reported roughly one successful wake in five and
+  the activation beep appearing in every successful transcript. These are
+  blocking observed defects; no exact trial count or idle false-activation rate
+  was recorded. The original model remains available as a hash-verified local
+  rollback artifact. See the
+  [session handoff](../docs/development/session-handoff-2026-09-03.md).
 - After wake detection, the ESP-SR Audio Front End captured speech until trailing silence and delivered bounded mono audio for local Whisper transcription.
 - Connection, disconnection, and wake acknowledgement cues were heard through the ES8311 speaker path.
 - On 2026-08-27 all cues became silent even though wake detection and the
@@ -113,5 +136,8 @@ ESP-IDF 5.5.2 was prepared in response to the bring-up review choice. It is an e
 - Battery or external-power behavior.
 - Wi-Fi connectivity.
 - Restoration of the factory backup after custom firmware use.
-- Acceptable “Yo Franky” miss rate and false-activation behavior; the latest
-  quiet-room test showed an unacceptable miss rate even at roughly 20 inches.
+- Acceptable “Yo Franky” miss rate and false-activation behavior; candidate v2
+  failed the practical spoken trial and idle false-activation behavior remains
+  unmeasured.
+- Cue-free wake transcripts; activation-beep contamination was reported on
+  September 3 and has not yet been diagnosed or fixed.

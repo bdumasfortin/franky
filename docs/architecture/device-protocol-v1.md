@@ -72,7 +72,7 @@ after each `READY` line:
 ```text
 READY FRANKY_DEVICE 5 16000 2 16 30.0
 WAKE_ENGINE microwakeword yo_franky
-CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample
+CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample wake_sample_score
 WAKE_THRESHOLD 96
 WAKE_DIAGNOSTICS OFF
 ```
@@ -109,13 +109,20 @@ sample request:
 WAKE_SAMPLE <500-to-5000-ms>
 ```
 
-The board disarms wake detection without stopping the ESP-SR Audio Front End,
-reports `WAKE_SAMPLE_START <duration_ms>`, and returns one existing `AUDIO`
-binary body containing the exact post-AFE mono stream supplied to custom-model
-inference. It restores the wake engine after the body and `END` marker. The
-control board currently requests three seconds and never persists the returned
-audio without a separate user acceptance action. This additive diagnostic uses
-version 5 framing; version 6 remains reserved for host-to-device response audio.
+The board disarms wake detection without stopping the ESP-SR Audio Front End and
+reports `WAKE_SAMPLE_START <duration_ms>`. After capture completes, it resets the
+embedded model and scores the exact frozen post-AFE buffer before reporting
+`WAKE_SAMPLE_SCORE <peak_percent>`. It then sends one existing `AUDIO` binary
+body containing those same bytes. Post-capture scoring keeps diagnostic reset and
+inference out of the concurrent capture loop. The score does not alter the
+configured production threshold. The board restores the wake engine after the
+body and `END` marker.
+
+The control board requests three seconds and never persists the returned audio
+without a separate user acceptance action. Firmware advertises the
+`wake_sample_score` capability only when the matched-score extension is
+available. This additive diagnostic uses version 5 framing; version 6 remains
+reserved for host-to-device response audio.
 
 ## USB named SFX extension
 

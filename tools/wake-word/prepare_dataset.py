@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import shutil
 import subprocess
 import sys
+import wave
 import zipfile
 from pathlib import Path
+
+import numpy as np
+import webrtcvad
 
 TOOL_ROOT = Path(__file__).resolve().parent
 CACHE_ROOT = TOOL_ROOT / ".cache"
@@ -20,6 +26,9 @@ POSITIVE_AUDIO = CACHE_ROOT / "audio" / "positive"
 HARD_NEGATIVE_AUDIO = CACHE_ROOT / "audio" / "hard-negative"
 FEATURE_ROOT = CACHE_ROOT / "features"
 NEGATIVE_ROOT = CACHE_ROOT / "negative-datasets"
+RECORDINGS_ROOT = CACHE_ROOT / "recordings"
+PHYSICAL_CORPUS_COUNTS = {"positive": 30, "hard-negative": 20}
+PHYSICAL_FEATURE_REPEATS = 16
 
 NEGATIVE_ARCHIVES = {
     "dinner_party.zip": 444_310_142,
@@ -77,6 +86,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not download the pre-generated ambient negative feature sets.",
     )
+    parser.add_argument(
+        "--only-physical-corpus",
+        action="store_true",
+        help="Prepare only the approved private 30/20 physical corpus features.",
+    )
+    parser.add_argument(
+        "--physical-candidate",
+        choices=("v1", "v2"),
+        default="v2",
+        help="Feature recipe to use with --only-physical-corpus (default: v2).",
+    )
     return parser.parse_args()
 
 
@@ -123,7 +143,7 @@ def generate_audio(phrase_file: Path, destination: Path, sample_count: int) -> N
     )
 
 
-def feature_augmenter() -> Augmentation:
+def feature_augmenter(*, truncate_randomly: bool = False) -> Augmentation:
     import audiomentations
     import piper_sample_generator
 
@@ -156,7 +176,188 @@ def feature_augmenter() -> Augmentation:
         max_gain_db=2,
         min_jitter_s=0.14,
         max_jitter_s=0.30,
+        truncate_randomly=truncate_randomly,
     )
+
+
+def load_canonical_pcm(path: Path) -> np.ndarray:
+    with wave.open(str(path), "rb") as source:
+        if (
+            source.getnchannels() != 1
+            or source.getsampwidth() != 2
+            or source.getframerate() != 16_000
+            or source.getcomptype() != "NONE"
+        ):
+            raise ValueError(f"{path.name} is not canonical 16 kHz mono PCM16 WAV audio.")
+        return np.frombuffer(
+            source.readframes(source.getnframes()), dtype="<i2"
+        ).copy()
+
+
+def align_utterance(pcm: np.ndarray) -> np.ndarray:
+    """Trim fixed capture padding while preserving the complete spoken utterance."""
+    frame_samples = 480
+    vad = webrtcvad.Vad(0)
+    voiced_frames = [
+        index
+        for index in range(0, len(pcm) - frame_samples + 1, frame_samples)
+        if vad.is_speech(pcm[index : index + frame_samples].tobytes(), 16_000)
+    ]
+    if not voiced_frames:
+        raise ValueError("A physical corpus sample contains no VAD speech frames.")
+
+    leading_context_samples = 1_600
+    trailing_context_samples = 3_200
+    start = max(0, voiced_frames[0] - leading_context_samples)
+    end = min(len(pcm), voiced_frames[-1] + frame_samples)
+    aligned = pcm[start:end]
+    return np.pad(aligned, (0, trailing_context_samples))
+
+
+class PhysicalCorpusClips:
+    def __init__(self, paths: list[Path], *, align: bool):
+        self.paths = paths
+        self.align = align
+
+    def audio_generator(self, split: str | None = None, repeat: int = 1):
+        if split is not None:
+            raise ValueError("Physical corpus features are training-only.")
+        for _ in range(repeat):
+            for path in self.paths:
+                pcm = load_canonical_pcm(path)
+                if self.align:
+                    pcm = align_utterance(pcm)
+                yield pcm.astype(np.float32) / 32_768.0
+
+
+def read_physical_corpus() -> dict[str, list[tuple[Path, dict[str, object]]]]:
+    corpus: dict[str, list[tuple[Path, dict[str, object]]]] = {
+        category: [] for category in PHYSICAL_CORPUS_COUNTS
+    }
+    seen_hashes: set[str] = set()
+    for category, expected_count in PHYSICAL_CORPUS_COUNTS.items():
+        directory = RECORDINGS_ROOT / category
+        for metadata_path in sorted(directory.glob("*.json")):
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8-sig"))
+            if str(metadata.get("purpose") or "corpus") != "corpus":
+                continue
+            if metadata.get("category") != category:
+                raise ValueError(f"Category mismatch in {metadata_path.name}.")
+            if metadata.get("capturePipeline") != "afe_processed_mono_v1":
+                raise ValueError(f"Unexpected capture pipeline in {metadata_path.name}.")
+
+            wave_path = metadata_path.with_suffix(".wav")
+            if not wave_path.is_file():
+                raise FileNotFoundError(f"Missing WAV for {metadata_path.name}.")
+            digest = hashlib.sha256(wave_path.read_bytes()).hexdigest()
+            if digest != metadata.get("sha256"):
+                raise ValueError(f"Hash mismatch for {wave_path.name}.")
+            if digest in seen_hashes:
+                raise ValueError(f"Duplicate physical corpus audio: {wave_path.name}.")
+            seen_hashes.add(digest)
+            load_canonical_pcm(wave_path)
+            corpus[category].append((wave_path, metadata))
+
+        if len(corpus[category]) != expected_count:
+            raise ValueError(
+                f"Expected {expected_count} {category} corpus samples, "
+                f"found {len(corpus[category])}."
+            )
+    return corpus
+
+
+def physical_manifest(
+    corpus: dict[str, list[tuple[Path, dict[str, object]]]],
+    candidate: str,
+) -> dict[str, object]:
+    manifest: dict[str, object] = {
+        "schemaVersion": 1,
+        "featureSet": f"physical-corpus-{candidate}",
+        "augmentationRepeats": PHYSICAL_FEATURE_REPEATS,
+        "positiveAlignment": "vad_envelope_with_100ms_leading_and_200ms_trailing_v1",
+        "samples": [
+            {
+                "id": metadata["id"],
+                "category": category,
+                "sha256": metadata["sha256"],
+            }
+            for category in PHYSICAL_CORPUS_COUNTS
+            for _, metadata in corpus[category]
+        ],
+    }
+    if candidate == "v2":
+        manifest["hardNegativeAlignment"] = (
+            "raw_full_capture_plus_vad_aligned_augmentation_v1"
+        )
+    return manifest
+
+
+def prepare_physical_corpus_features(candidate: str) -> None:
+    physical_feature_root = FEATURE_ROOT / f"physical-corpus-{candidate}"
+    corpus = read_physical_corpus()
+    manifest = physical_manifest(corpus, candidate)
+    manifest_path = physical_feature_root / "manifest.json"
+    feature_maps = [
+        physical_feature_root / category / "training" / f"physical_{category.replace('-', '_')}_{kind}_mmap"
+        for category in PHYSICAL_CORPUS_COUNTS
+        for kind in ("raw", "augmented")
+    ]
+    if all(path.exists() for path in feature_maps) and manifest_path.is_file():
+        existing = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if existing != manifest:
+            raise RuntimeError(
+                f"{physical_feature_root} does not match the current corpus. "
+                "Move it aside before regenerating."
+            )
+        print("[features] physical corpus: using validated existing feature maps")
+        return
+    if any(path.exists() for path in feature_maps) or manifest_path.exists():
+        raise RuntimeError(
+            f"{physical_feature_root} contains a partial feature set. "
+            "Move it aside before rerunning."
+        )
+
+    for category, samples in corpus.items():
+        paths = [path for path, _ in samples]
+        training_directory = physical_feature_root / category / "training"
+        training_directory.mkdir(parents=True, exist_ok=True)
+        label = category.replace("-", "_")
+
+        raw_spectrograms = SpectrogramGeneration(
+            clips=PhysicalCorpusClips(paths, align=category == "positive"),
+            augmenter=None,
+            slide_frames=4,
+            step_ms=10,
+        )
+        print(f"[features] physical {category}: raw")
+        RaggedMmap.from_generator(
+            out_dir=str(training_directory / f"physical_{label}_raw_mmap"),
+            sample_generator=raw_spectrograms.spectrogram_generator(),
+            batch_size=100,
+            verbose=True,
+        )
+
+        augmented_spectrograms = SpectrogramGeneration(
+            clips=PhysicalCorpusClips(
+                paths,
+                align=category == "positive" or candidate == "v2",
+            ),
+            augmenter=feature_augmenter(truncate_randomly=candidate == "v1"),
+            slide_frames=2,
+            step_ms=10,
+        )
+        print(f"[features] physical {category}: augmented")
+        RaggedMmap.from_generator(
+            out_dir=str(training_directory / f"physical_{label}_augmented_mmap"),
+            sample_generator=augmented_spectrograms.spectrogram_generator(
+                repeat=PHYSICAL_FEATURE_REPEATS
+            ),
+            batch_size=100,
+            verbose=True,
+        )
+
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    print("[features] physical corpus: 30 positive and 20 hard-negative samples prepared")
 
 
 def generate_features(audio_directory: Path, feature_directory: Path, label: str) -> None:
@@ -280,6 +481,10 @@ def prepare_ambient_features() -> None:
 
 def main() -> None:
     args = parse_args()
+    if args.only_physical_corpus:
+        prepare_physical_corpus_features(args.physical_candidate)
+        print("Physical corpus preparation complete.")
+        return
     if not GENERATOR_MODEL.exists():
         raise RuntimeError("Generator model is missing; run bootstrap.ps1 first.")
 

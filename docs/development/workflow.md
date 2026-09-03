@@ -14,8 +14,21 @@ about ten repetitions. Wake sensitivity is therefore unacceptable and must be
 tuned from physical evidence rather than synthetic metrics alone. The first
 private physical corpus is now complete. Offline scoring found overlapping
 positive and hard-negative distributions at every tested cutoff from 50–99%,
-so a threshold change is not a viable fix. Board/evaluator score parity is the
-next wake evidence gate before candidate retraining.
+so a threshold change is not a viable fix. The corrected matched-score firmware
+now captures first and scores the frozen post-AFE buffer without concurrent
+model access. Three spoken samples matched the offline evaluator exactly at
+100/100, 100/100, and 91/91. Two isolated candidates were then trained without
+overwriting the deployed model. The second candidate retained all 30 physical
+positives at 100% and reduced 96%-cutoff hard-negative activations from 5/20 to
+2/20 on the reused training corpus. This is provisional evidence only. The user
+explicitly chose to flash candidate v2 for a pragmatic trial before the formal
+fresh-session gate; the board booted with it armed at 96%, and the original
+baseline remains available for rollback.
+
+The subsequent September 3 trial failed: the user reported roughly one wake in
+five and the activation cue appearing in every successful transcript. Work is
+paused, not accepted. The [session handoff](session-handoff-2026-09-03.md)
+records the investigation priorities, current artifacts, and restart procedure.
 
 The active gap is no longer basic hardware bring-up or transcript routing. The
 control-board service now feeds each completed wake transcript into the existing
@@ -67,7 +80,8 @@ Supply local values through process environment variables. Do not place a real A
   commit its datasets, recordings, checkpoints, or exported `.tflite` file.
 - Use the control board's Dataset area for approved physical wake samples. It
   stores only explicitly kept recordings under the ignored wake-word cache;
-  ordinary wake utterances remain ephemeral.
+  ordinary wake utterances remain ephemeral. After corpus completion, parity
+  samples are labeled separately and excluded from the corpus totals.
 - Keep Wi-Fi transport changes behind the documented device boundary so the working speech and command paths do not need to be redesigned.
 
 See the [hardware bring-up record](../../firmware/hardware-bring-up.md) for observed evidence and remaining hardware gaps.

@@ -74,8 +74,11 @@ generation.
 
 ## Active vertical slice
 
-Improve wake reliability, then repeat the implemented bridge and device-action
-evidence pass:
+Fix wake reliability and activation-cue transcript contamination, then repeat
+the implemented bridge and device-action evidence pass. The September 3 v2
+trial failed: the user reported roughly one wake in five and cue contamination
+in every successful transcript. Work is paused; begin with the
+[session handoff](../development/session-handoff-2026-09-03.md).
 
 1. Tune or retrain “Yo Franky” from physical evidence rather than accepting the
    synthetic evaluation as representative. A temporary 50–99% cutoff and
@@ -87,14 +90,25 @@ evidence pass:
    with an offline current-model evaluator. The first 30-positive/20-hard-
    negative corpus is complete. At 96%, offline scoring detected 25 positives
    and activated on five hard negatives; from 50–99%, no tested cutoff produced
-   useful class separation. Verify board/evaluator score parity on shared
-   samples, then train a candidate without consuming the final physical
-   acceptance set as training evidence.
+   useful class separation. A matched-score diagnostic is now built, flashed,
+   and protocol-tested. A concurrency race in the first spoken diagnostic was
+   corrected by scoring the frozen buffer after capture. The repeated samples
+   then matched board/offline scores exactly at 100/100, 100/100, and 91/91.
+   Two isolated candidates were trained without consuming the later physical
+   acceptance session. Candidate v1 was rejected because it still activated on
+   5/20 training-corpus hard negatives at 96%. Candidate v2 scored all 30
+   positives at 100% and reduced that count to 2/20, while retaining viable
+   separate synthetic/ambient results. The user explicitly authorized flashing
+   it for a pragmatic trial before formal fresh-session acceptance. It is now
+   left flashed at 96%, but the user's live trial was unacceptable. Investigate
+   the continuous audio/inference path versus frozen-clip scoring, and preserve
+   the original model as the rollback baseline. No new flash is implied.
 2. Measure repeated wakes at a fixed distance and quiet-room condition, then
    observe an idle period for false activations.
 3. Repeat both read-only diagnostics, “How is it going?”, and the longer
-   negative control after wake tuning; the downstream behavior passed in the
-   latest test but the entry path did not.
+   negative control after both defects are addressed. Downstream behavior passed
+   in the earlier August 27 test, but the latest trial reports contaminated
+   transcripts and does not establish a downstream pass.
 4. Record stage latency rather than relying only on the current “very low”
    subjective observation.
 5. Keep ordinary wake audio and transcripts ephemeral. The separately approved

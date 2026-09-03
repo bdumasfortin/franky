@@ -37,6 +37,8 @@ public sealed class WakeDatasetStore
         var normalizedCategory = NormalizeCategory(category);
         ArgumentNullException.ThrowIfNull(wave);
         ArgumentNullException.ThrowIfNull(details);
+        var normalizedPurpose = NormalizePurpose(details.Purpose);
+        var boardPeakScorePercent = NormalizeBoardPeakScore(details.BoardPeakScorePercent);
 
         await using var audio = new MemoryStream();
         var transferBuffer = new byte[16 * 1024];
@@ -78,7 +80,9 @@ public sealed class WakeDatasetStore
             "afe_processed_mono_v1",
             Convert.ToHexString(SHA256.HashData(audio.ToArray())).ToLowerInvariant(),
             audioMetrics.PeakDbfs,
-            audioMetrics.RmsDbfs);
+            audioMetrics.RmsDbfs,
+            normalizedPurpose,
+            boardPeakScorePercent);
 
         await _gate.WaitAsync(cancellationToken);
         try
@@ -144,8 +148,8 @@ public sealed class WakeDatasetStore
                 "tools/wake-word/.cache/recordings",
                 PositiveTarget,
                 HardNegativeTarget,
-                samples.Count(sample => sample.Category == "positive"),
-                samples.Count(sample => sample.Category == "hard-negative"),
+                samples.Count(sample => sample.Category == "positive" && IsCorpusSample(sample)),
+                samples.Count(sample => sample.Category == "hard-negative" && IsCorpusSample(sample)),
                 samples);
         }
         finally
@@ -275,6 +279,32 @@ public sealed class WakeDatasetStore
         return cleaned.Length <= maximumLength ? cleaned : cleaned[..maximumLength];
     }
 
+    private static string NormalizePurpose(string? purpose)
+    {
+        var normalized = string.IsNullOrWhiteSpace(purpose)
+            ? "corpus"
+            : purpose.Trim().ToLowerInvariant();
+        if (normalized is not ("corpus" or "parity"))
+        {
+            throw new ArgumentException("Purpose must be corpus or parity.", nameof(purpose));
+        }
+        return normalized;
+    }
+
+    private static int? NormalizeBoardPeakScore(int? score)
+    {
+        if (score is < 0 or > 100)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(score),
+                "Board peak score must be between 0 and 100 percent.");
+        }
+        return score;
+    }
+
+    private static bool IsCorpusSample(WakeDatasetSample sample) =>
+        !string.Equals(sample.Purpose, "parity", StringComparison.Ordinal);
+
     private static bool IsValidId(string? id) =>
         !string.IsNullOrWhiteSpace(id) &&
         id.Length <= 80 &&
@@ -352,7 +382,9 @@ public sealed record WakeDatasetSampleDetails(
     string? Prompt,
     string? Distance,
     string? Orientation,
-    int GainDb);
+    int GainDb,
+    string? Purpose = null,
+    int? BoardPeakScorePercent = null);
 
 public sealed record WakeDatasetSample(
     string Id,
@@ -368,7 +400,9 @@ public sealed record WakeDatasetSample(
     string CapturePipeline,
     string Sha256,
     double PeakDbfs,
-    double RmsDbfs);
+    double RmsDbfs,
+    string? Purpose = null,
+    int? BoardPeakScorePercent = null);
 
 public sealed record WakeDatasetStatus(
     string Storage,

@@ -9,10 +9,9 @@ wake word, speaker cues, and status LEDs; the computer handles local speech
 recognition, conversation, and safe command execution.
 
 > **Current state:** the USB development path works end to end from a wake
-> phrase to a local transcript. A custom **“Yo Franky”** model is now trained,
-> flashed, and able to trigger, but a broader physical check found unacceptable
-> sensitivity: it sometimes required roughly ten repetitions at 20 inches in a
-> quiet room. Wake tuning is now the active physical blocker.
+> phrase to a local transcript. The original custom **“Yo Franky”** model could
+> trigger, but a broader physical check found unacceptable sensitivity: it
+> sometimes required roughly ten repetitions at 20 inches in a quiet room.
 > A diagnostic firmware build with temporary sensitivity control and
 > metadata-only near-miss scores is flashed. A 96% versus 87% comparison yielded
 > roughly three detections per ten attempts at both settings, so representative
@@ -22,8 +21,20 @@ recognition, conversation, and safe command execution.
 > acceptance before local storage, and includes an offline evaluator. The first
 > 30-positive/20-hard-negative spoken corpus is complete. Offline scoring at the
 > current 96% cutoff detected 25/30 positives but also activated on 5/20 hard
-> negatives; no tested cutoff from 50–99% separated the two classes. Board versus
-> evaluator score parity is the next evidence gate before a retrained candidate.
+> negatives; no tested cutoff from 50–99% separated the two classes. The
+> matched-score diagnostic now captures first and scores the exact frozen buffer,
+> avoiding concurrent model access. Three corrected spoken samples matched the
+> offline evaluator exactly: 100/100 facing, 100/100 side-on, and 91/91 for the
+> hard negative “Yo friendly people.” Offline score parity is therefore verified.
+> A second physically tuned candidate is now the provisional replacement: on the
+> reused training corpus it scored all 30 positives at 100% and reduced 96%-cutoff
+> hard-negative activations from 5/20 to 2/20. Its separate synthetic/ambient test
+> remained viable, but neither result is fresh physical evidence. At the user's
+> explicit request, candidate v2 is now flashed as a pragmatic trial at the 96%
+> cutoff. The user then reported roughly one successful wake in five and the
+> activation beep appearing in every successful transcript. Both defects block
+> acceptance; the exact original model remains available for rollback. Resume
+> from the [session handoff](docs/development/session-handoff-2026-09-03.md).
 > The control board now hands completed transcripts to Franky's conversation
 > and allowlisted-command path. Ollama with `qwen3.5:4b` is the selected local
 > provider, while OpenAI remains an optional cloud adapter. The HTTP bridge and

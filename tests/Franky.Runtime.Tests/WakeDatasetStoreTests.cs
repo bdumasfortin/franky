@@ -25,18 +25,36 @@ internal static class WakeDatasetStoreTests
 
             TestAssert.Equal("positive", sample.Category);
             TestAssert.Equal(3_000, sample.DurationMilliseconds);
+            TestAssert.Equal("corpus", sample.Purpose);
             TestAssert.True(File.Exists(store.GetAudioPath(sample.Id)));
+
+            await using var parityWave = CreateWave(sampleBytes: 96_000);
+            var paritySample = await store.SaveAsync(
+                "positive",
+                parityWave,
+                new WakeDatasetSampleDetails(
+                    "parity-positive",
+                    "Yo Franky",
+                    "20 inches",
+                    "facing",
+                    30,
+                    "parity",
+                    88),
+                CancellationToken.None);
+            TestAssert.Equal("parity", paritySample.Purpose);
+            TestAssert.Equal(88, paritySample.BoardPeakScorePercent);
 
             var status = await store.GetStatusAsync(CancellationToken.None);
             TestAssert.Equal(1, status.PositiveCount);
             TestAssert.Equal(0, status.HardNegativeCount);
-            TestAssert.Equal(sample.Id, status.Samples.Single().Id);
+            TestAssert.Equal(2, status.Samples.Count);
 
             TestAssert.True(await store.DeleteAsync(sample.Id, CancellationToken.None));
             TestAssert.False(await store.DeleteAsync(sample.Id, CancellationToken.None));
             TestAssert.False(await store.DeleteAsync("../outside", CancellationToken.None));
             status = await store.GetStatusAsync(CancellationToken.None);
             TestAssert.Equal(0, status.PositiveCount);
+            TestAssert.Equal(paritySample.Id, status.Samples.Single().Id);
         }
         finally
         {
@@ -62,6 +80,13 @@ internal static class WakeDatasetStoreTests
                 "positive",
                 stereo,
                 new WakeDatasetSampleDetails(null, null, null, null, 30),
+                CancellationToken.None));
+
+            await using var invalidScore = CreateWave(sampleBytes: 96_000);
+            await ExpectInvalidAsync(() => store.SaveAsync(
+                "positive",
+                invalidScore,
+                new WakeDatasetSampleDetails(null, null, null, null, 30, "parity", 101),
                 CancellationToken.None));
         }
         finally

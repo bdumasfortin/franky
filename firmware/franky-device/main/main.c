@@ -57,7 +57,7 @@ static void print_device_info(void)
         wake_word_engine_name(),
         wake_word_phrase_id());
     if (strcmp(wake_word_engine_name(), "microwakeword") == 0) {
-        printf("CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample\n");
+        printf("CAPABILITIES wake_capture named_sfx wake_threshold wake_diagnostics wake_sample wake_sample_score\n");
         printf("WAKE_THRESHOLD %u\n", wake_word_get_threshold_percent());
         printf(
             "WAKE_DIAGNOSTICS %s\n",
@@ -283,11 +283,16 @@ static void wake_sample_task(void *argument)
     printf("WAKE_SAMPLE_START %u\n", (unsigned)duration_ms);
     show_state(SYSTEM_LED_LISTENING);
     wake_utterance_t sample = {0};
-    esp_err_t capture_error = wake_word_capture_sample(duration_ms, &sample);
+    uint8_t peak_score_percent = 0;
+    esp_err_t capture_error = wake_word_capture_sample(
+        duration_ms,
+        &sample,
+        &peak_score_percent);
 
     if (capture_error == ESP_OK) {
         const size_t captured_bytes = sample.sample_count * sizeof(int16_t);
         show_state(SYSTEM_LED_PROCESSING);
+        printf("WAKE_SAMPLE_SCORE %u\n", peak_score_percent);
         printf(
             "AUDIO %u %u 1 16\n",
             (unsigned)captured_bytes,

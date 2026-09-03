@@ -63,12 +63,30 @@ alone is not an acceptable production fix.
 
 The first private post-AFE corpus is now complete: 30 positive “Yo Franky”
 samples and 20 hard negatives, all captured through the guided control-board
-workflow. Offline evaluation of the deployed model detected 25/30 positives and
+workflow. Offline evaluation of the original deployed model detected 25/30 positives and
 activated on 5/20 hard negatives at 96%. Across tested cutoffs from 50–99%, the
 best positive count was 28/30 while hard-negative activations never fell below
 4/20. Five similar negatives scored 97–100%. This overlap confirms that no
-tested threshold is an acceptable fix. The absolute scores remain provisional
-until one or more shared samples establish Python-versus-board parity.
+tested threshold is an acceptable fix. After correcting a diagnostic scoring
+race, three spoken samples matched board/offline peaks exactly at 100/100,
+100/100, and 91/91, validating the absolute offline scores for this pipeline.
+
+Two physically tuned models were then trained in isolated ignored directories.
+Candidate v1 recovered all positives but left 5/20 hard-negative activations at
+96%, so it was rejected. Candidate v2 scored all 30 positives at 100% and
+reduced that count to 2/20. Its separate synthetic/ambient test reported 2.0%
+false rejection and 0.187 estimated false accepts per hour at 95%, and 3.33%
+false rejection with no observed false accepts at 98%. Because the physical
+figures reuse training data, candidate v2 remains provisional. The user chose
+to flash it for a pragmatic physical trial at 96%; the original baseline model
+remains available for rollback.
+
+The September 3 practical trial was not sufficient: the user reported roughly
+one wake in five, plus the activation beep appearing in every successful
+transcript. Candidate v2 is not accepted. Investigate live streaming behavior
+and generalization separately from the frozen-clip scoring sanity check; the
+[session handoff](../../docs/development/session-handoff-2026-09-03.md) records
+the next investigation and exact local artifacts.
 
 ## Tuning loop
 
@@ -90,8 +108,37 @@ Evaluate the deployed model before retraining:
 .\.venv\Scripts\python.exe .\evaluate_recordings.py
 ```
 
+Prepare the approved physical corpus and reproduce candidate v2 without
+overwriting the deployed firmware model:
+
+```powershell
+.\.venv\Scripts\python.exe .\prepare_dataset.py --only-physical-corpus
+.\train_physical_candidate.ps1 -Candidate v2
+.\.venv\Scripts\python.exe .\evaluate_recordings.py `
+  --model .\.cache\trained\yo_franky_physical_v2\tflite_stream_state_internal_quant\stream_state_internal_quant.tflite `
+  --output .\.cache\evaluation\physical-candidate-v2.json
+```
+
+The preparation step requires exactly 30 positive and 20 hard-negative corpus
+samples with valid sidecar hashes and canonical post-AFE audio. It excludes all
+parity samples. The training wrapper verifies the preserved rollback-baseline hash, seeds
+an isolated candidate from its checkpoint, and refuses partial output. It never
+copies the candidate into `firmware/`; export and flashing remain separate,
+explicit actions. Candidate v2 was copied and flashed only after separate user
+authorization. The default preparation recipe is v2; pass
+`--physical-candidate v1` only to reproduce the rejected v1 experiment with its
+original unaligned, randomly truncated negative augmentation.
+
 The evaluator reproduces the three-frame inference stride and five-score
-integer moving average used by firmware. Its private report is written to
-`.cache/evaluation/latest.json`. The complete first physical corpus has exercised
-the path; the report remains private with the recordings. See the
+integer moving average used by firmware, including the firmware's integer
+rounding rule. Parity samples retain the embedded board peak in their sidecar;
+the evaluator reports exact, within-one-point, and maximum score deltas without
+mixing those samples into the 30/20 corpus totals. Measurements explicitly
+marked invalid are preserved but excluded from parity summaries. Board-score
+comparison is enabled only for the exact baseline model hash used to capture the
+existing parity set; changing the file at the default model path cannot produce
+a misleading cross-model comparison. Its private
+report is written to `.cache/evaluation/latest.json`. The complete first
+physical corpus has exercised the path; the report remains private with the
+recordings. See the
 [collection and evaluation guide](../../docs/development/wake-word-data-collection.md).

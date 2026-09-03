@@ -49,6 +49,7 @@ size_t s_probability_count;
 size_t s_probability_index;
 uint8_t s_threshold_percent = kDefaultThresholdPercent;
 uint8_t s_last_score_percent;
+uint8_t s_peak_score_percent;
 bool s_initialized;
 
 uint8_t *allocate_arena(size_t bytes)
@@ -153,6 +154,7 @@ bool process_feature_frame(const int8_t *features)
     s_last_score_percent = static_cast<uint8_t>(
         (static_cast<uint32_t>(sum) * 100 + probability_scale / 2) /
         probability_scale);
+    s_peak_score_percent = std::max(s_peak_score_percent, s_last_score_percent);
     return static_cast<uint32_t>(sum) * 100 >=
         static_cast<uint32_t>(s_threshold_percent) * probability_scale;
 }
@@ -167,6 +169,38 @@ bool process_audio_window()
         return false;
     }
     return process_feature_frame(s_preprocessor->output(0)->data.int8);
+}
+
+bool process_samples(
+    const int16_t *samples,
+    size_t sample_count,
+    bool stop_on_detection)
+{
+    bool detected = false;
+    while (sample_count > 0) {
+        const size_t copied = std::min(
+            sample_count,
+            kAudioWindowSamples - s_audio_window_size);
+        std::memcpy(
+            s_audio_window + s_audio_window_size,
+            samples,
+            copied * sizeof(int16_t));
+        s_audio_window_size += copied;
+        samples += copied;
+        sample_count -= copied;
+
+        if (s_audio_window_size == kAudioWindowSamples) {
+            const bool frame_detected = process_audio_window();
+            std::memmove(
+                s_audio_window,
+                s_audio_window + kAudioStepSamples,
+                (kAudioWindowSamples - kAudioStepSamples) * sizeof(int16_t));
+            s_audio_window_size = kAudioWindowSamples - kAudioStepSamples;
+            detected = detected || frame_detected;
+            if (frame_detected && stop_on_detection) return true;
+        }
+    }
+    return detected;
 }
 
 }  // namespace
@@ -262,6 +296,7 @@ extern "C" void franky_wake_model_reset(void)
     s_probability_count = 0;
     s_probability_index = 0;
     s_last_score_percent = 0;
+    s_peak_score_percent = 0;
     if (s_wake_resources != nullptr) s_wake_resources->ResetAll();
 }
 
@@ -289,33 +324,23 @@ extern "C" uint8_t franky_wake_model_get_last_score_percent(void)
     return s_last_score_percent;
 }
 
+extern "C" uint8_t franky_wake_model_get_peak_score_percent(void)
+{
+    return s_peak_score_percent;
+}
+
 extern "C" bool franky_wake_model_process(
     const int16_t *samples,
     size_t sample_count)
 {
     if (!s_initialized || samples == nullptr) return false;
+    return process_samples(samples, sample_count, true);
+}
 
-    while (sample_count > 0) {
-        const size_t copied = std::min(
-            sample_count,
-            kAudioWindowSamples - s_audio_window_size);
-        std::memcpy(
-            s_audio_window + s_audio_window_size,
-            samples,
-            copied * sizeof(int16_t));
-        s_audio_window_size += copied;
-        samples += copied;
-        sample_count -= copied;
-
-        if (s_audio_window_size == kAudioWindowSamples) {
-            const bool detected = process_audio_window();
-            std::memmove(
-                s_audio_window,
-                s_audio_window + kAudioStepSamples,
-                (kAudioWindowSamples - kAudioStepSamples) * sizeof(int16_t));
-            s_audio_window_size = kAudioWindowSamples - kAudioStepSamples;
-            if (detected) return true;
-        }
-    }
-    return false;
+extern "C" void franky_wake_model_score_samples(
+    const int16_t *samples,
+    size_t sample_count)
+{
+    if (!s_initialized || samples == nullptr) return;
+    (void)process_samples(samples, sample_count, false);
 }

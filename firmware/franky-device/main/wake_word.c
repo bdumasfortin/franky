@@ -477,14 +477,17 @@ esp_err_t wake_word_capture_utterance(
 
 esp_err_t wake_word_capture_sample(
     uint32_t duration_ms,
-    wake_utterance_t *utterance)
+    wake_utterance_t *utterance,
+    uint8_t *peak_score_percent)
 {
-    if (!s_initialized || utterance == NULL || s_capture_active ||
+    if (!s_initialized || utterance == NULL || peak_score_percent == NULL ||
+        s_capture_active || !s_using_custom_model ||
         duration_ms < 500 || duration_ms > 5000) {
         return ESP_ERR_INVALID_ARG;
     }
 
     memset(utterance, 0, sizeof(*utterance));
+    *peak_score_percent = 0;
     const size_t capacity_samples =
         ((size_t)FRANKY_SAMPLE_RATE * duration_ms) / 1000;
     int16_t *samples = heap_caps_malloc(
@@ -495,9 +498,6 @@ esp_err_t wake_word_capture_sample(
 
     s_wake_armed = false;
     disarm_wake_engine();
-#if FRANKY_HAS_CUSTOM_WAKE_MODEL
-    if (s_using_custom_model) franky_wake_model_reset();
-#endif
     xEventGroupClearBits(s_events, CAPTURE_COMPLETE_BIT);
     s_capture_samples = samples;
     s_capture_capacity_samples = capacity_samples;
@@ -527,6 +527,16 @@ esp_err_t wake_word_capture_sample(
     utterance->samples = samples;
     utterance->sample_count = s_capture_sample_count;
     utterance->end_reason = s_capture_end_reason;
+#if FRANKY_HAS_CUSTOM_WAKE_MODEL
+    // Score the exact frozen buffer only after capture has completed. Keeping
+    // both reset and inference out of the concurrent capture loop prevents a
+    // normal wake inference already in flight from corrupting parity results.
+    franky_wake_model_reset();
+    franky_wake_model_score_samples(
+        utterance->samples,
+        utterance->sample_count);
+    *peak_score_percent = franky_wake_model_get_peak_score_percent();
+#endif
     s_capture_samples = NULL;
     s_capture_capacity_samples = 0;
     s_capture_sample_count = 0;

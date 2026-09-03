@@ -227,10 +227,33 @@ function currentDatasetPrompt() {
   const count = positive
     ? wakeDatasetStatus?.positiveCount || 0
     : wakeDatasetStatus?.hardNegativeCount || 0;
+  const target = positive
+    ? wakeDatasetStatus?.positiveTarget || positiveInstructions.length
+    : wakeDatasetStatus?.hardNegativeTarget || hardNegativePrompts.length;
+  if (count >= target) {
+    return positive
+      ? {
+        category: 'positive',
+        purpose: 'parity',
+        id: 'parity-positive',
+        text: 'Yo Franky',
+        instruction: 'Parity check: use a representative delivery and keep the sample only if a board score appears.',
+        step: 'Board ↔ offline parity · positive',
+      }
+      : {
+        category: 'hard-negative',
+        purpose: 'parity',
+        id: 'parity-hard-negative',
+        text: 'Yo friendly people',
+        instruction: 'Parity check: say the displayed confusing phrase exactly once.',
+        step: 'Board ↔ offline parity · hard negative',
+      };
+  }
   if (positive) {
     const index = Math.min(count, positiveInstructions.length - 1);
     return {
       category: 'positive',
+      purpose: 'corpus',
       id: `positive-${String(index + 1).padStart(2, '0')}`,
       text: 'Yo Franky',
       instruction: positiveInstructions[index],
@@ -241,6 +264,7 @@ function currentDatasetPrompt() {
   const index = Math.min(count, hardNegativePrompts.length - 1);
   return {
     category: 'hard-negative',
+    purpose: 'corpus',
     id: `hard-negative-${String(index + 1).padStart(2, '0')}`,
     text: hardNegativePrompts[index],
     instruction: 'Say the displayed phrase naturally. It must not activate Franky.',
@@ -253,22 +277,32 @@ function updateDatasetPrompt() {
   els.datasetPromptStep.textContent = prompt.step;
   els.datasetPromptText.textContent = `“${prompt.text}”`;
   els.datasetPromptInstruction.textContent = prompt.instruction;
+  els.datasetCaptureButton.textContent = prompt.purpose === 'parity'
+    ? 'Record parity sample'
+    : 'Record 3-second sample';
 }
 
 function updateDatasetControls() {
   const connected = isConnected();
   const supported = wakeCapabilities.has('wake_sample');
+  const prompt = currentDatasetPrompt();
+  const parityScoreMissing = prompt.purpose === 'parity' && !wakeCapabilities.has('wake_sample_score');
   const busy = Boolean(recordingContext || pendingDatasetSample || transcriptionInFlight);
-  els.datasetCaptureButton.disabled = !connected || !supported || busy;
+  els.datasetCaptureButton.disabled = !connected || !supported || parityScoreMissing || busy;
   if (!connected) {
     els.datasetCaptureStatus.textContent = 'Connect Franky';
     els.datasetCaptureDetail.textContent = 'Exact wake-model input · nothing saved automatically';
   } else if (!supported) {
     els.datasetCaptureStatus.textContent = 'Firmware update required';
     els.datasetCaptureDetail.textContent = 'The connected firmware cannot export wake-model samples';
+  } else if (parityScoreMissing) {
+    els.datasetCaptureStatus.textContent = 'Firmware update required';
+    els.datasetCaptureDetail.textContent = 'The completed corpus is ready for board ↔ offline score parity';
   } else if (!pendingDatasetSample && !recordingContext) {
     els.datasetCaptureStatus.textContent = 'Ready';
-    els.datasetCaptureDetail.textContent = 'Three seconds · processed mono · review before keeping';
+    els.datasetCaptureDetail.textContent = prompt.purpose === 'parity'
+      ? 'Three seconds · same bytes scored onboard and offline'
+      : 'Three seconds · processed mono · review before keeping';
   }
 }
 
@@ -306,7 +340,11 @@ function renderWakeDataset() {
     const title = document.createElement('strong');
     title.textContent = sample.category === 'positive' ? 'Positive · Yo Franky' : `Hard negative · ${sample.prompt}`;
     const meta = document.createElement('small');
-    meta.textContent = `${(sample.durationMilliseconds / 1000).toFixed(1)} s · ${sample.distance} · ${sample.orientation} · ${new Date(sample.createdAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    const boardScore = Number.isInteger(sample.boardPeakScorePercent)
+      ? ` · board ${sample.boardPeakScorePercent}%`
+      : '';
+    const purpose = sample.purpose === 'parity' ? 'Parity · ' : '';
+    meta.textContent = `${purpose}${(sample.durationMilliseconds / 1000).toFixed(1)} s · ${sample.distance} · ${sample.orientation}${boardScore} · ${new Date(sample.createdAtUtc).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
     detail.append(title, meta);
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -338,8 +376,11 @@ function presentDatasetSample(blob, durationSeconds, levels, context) {
   datasetReviewUrl = URL.createObjectURL(blob);
   pendingDatasetSample = { blob, context };
   els.datasetReviewAudio.src = datasetReviewUrl;
+  const boardScore = Number.isInteger(context.boardPeakScorePercent)
+    ? ` · board model ${context.boardPeakScorePercent}%`
+    : '';
   els.datasetReviewMeta.textContent =
-    `${durationSeconds.toFixed(1)} s · peak ${formatDb(levels.peakDb)} · RMS ${formatDb(levels.rmsDb)} · not saved yet`;
+    `${durationSeconds.toFixed(1)} s · peak ${formatDb(levels.peakDb)} · RMS ${formatDb(levels.rmsDb)}${boardScore} · not saved yet`;
   els.datasetReview.hidden = false;
   els.datasetCaptureStatus.textContent = 'Review sample';
   els.datasetCaptureDetail.textContent = 'Listen, then keep it or discard it';
@@ -360,7 +401,11 @@ async function keepDatasetSample() {
     distance: context.distance,
     orientation: context.orientation,
     gainDb: String(context.gain),
+    purpose: context.prompt.purpose,
   });
+  if (Number.isInteger(context.boardPeakScorePercent)) {
+    query.set('boardPeakScorePercent', String(context.boardPeakScorePercent));
+  }
 
   try {
     const response = await fetch(`/api/wake-dataset/samples?${query}`, {
@@ -797,6 +842,18 @@ function handleLine(line) {
     els.datasetCaptureStatus.textContent = 'Recording now';
     els.datasetCaptureDetail.textContent = 'Say the displayed phrase once';
     appendTerminal('DATASET', `Wake-model input capture started · ${(durationMs / 1000).toFixed(1)} seconds`);
+    return;
+  }
+
+  if (line.startsWith('WAKE_SAMPLE_SCORE ')) {
+    const peakScorePercent = Number(line.split(/\s+/)[1]);
+    if (!Number.isInteger(peakScorePercent) || peakScorePercent < 0 || peakScorePercent > 100) return;
+    if (recordingContext?.source === 'dataset') {
+      recordingContext.boardPeakScorePercent = peakScorePercent;
+      els.datasetCaptureStatus.textContent = `Board score ${peakScorePercent}%`;
+      els.datasetCaptureDetail.textContent = 'Receiving the identical audio for offline comparison';
+    }
+    appendTerminal('DATASET', `Embedded wake-model peak · ${peakScorePercent}%`);
     return;
   }
 
@@ -1420,7 +1477,7 @@ for (const tab of els.featureTabs) {
   tab.addEventListener('click', () => selectFeature(tab.dataset.feature));
 }
 
-els.connectButton.addEventListener('click', connect);
+els.connectButton.addEventListener('click', () => void connect());
 els.disconnectButton.addEventListener('click', () => disconnect());
 
 els.recordButton.addEventListener('click', async () => {

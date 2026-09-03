@@ -37,5 +37,6 @@ esp_err_t wake_word_capture_utterance(
     wake_utterance_t *utterance);
 esp_err_t wake_word_capture_sample(
     uint32_t duration_ms,
-    wake_utterance_t *utterance);
+    wake_utterance_t *utterance,
+    uint8_t *peak_score_percent);
 void wake_word_release_utterance(wake_utterance_t *utterance);

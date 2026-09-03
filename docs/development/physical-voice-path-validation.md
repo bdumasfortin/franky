@@ -1,8 +1,23 @@
 # Physical Voice-Path Validation
 
-Status: **Ready for manual execution**
+Status: **Fail — wake reliability and activation-cue contamination remain open**
 
-## Latest result — August 27, 2026
+## Latest result — September 3, 2026
+
+After candidate v2 was flashed at 96% and the control board was restored in
+real local Ollama mode (`qwen3.5:4b`, tools enabled), the user reported roughly
+one successful wake in five attempts. On every successful wake, the activation
+beep appeared in the transcript. Both are blocking physical-path defects.
+
+This is a user-observed approximate ratio, not a recorded five-trial experiment.
+Exact trial counts, transcript wording, current distance/noise conditions, and
+fresh audio were not collected. The source of the cue contamination is not yet
+diagnosed. Earlier successful downstream observations must not be generalized
+to this trial. Candidate v2 is not accepted; no fix or rollback was made before
+the user requested a pause. Resume from the
+[session handoff](session-handoff-2026-09-03.md).
+
+## Earlier result — August 27, 2026
 
 Gate result: **Fail on wake reliability; downstream voice path passed when the
 wake succeeded.**
@@ -82,9 +97,38 @@ positives but activated on 7/20 hard negatives; at 99%, it detected only 21/30
 while still activating on 4/20. Five hard negatives scored 97–100%, including
 “You’re frankly mistaken” and “Yo friendly people.” The current model therefore
 has no usable tested cutoff. These are offline same-session clip results, not a
-false-activation-per-hour measurement, and board/evaluator score parity remains
-unverified. Follow the [wake-word collection guide](wake-word-data-collection.md)
-for the complete table and the next gate.
+false-activation-per-hour measurement. Follow the
+[wake-word collection guide](wake-word-data-collection.md) for the complete
+table and the next gate.
+
+The matched-score diagnostic reports an embedded model peak for every deliberate
+`WAKE_SAMPLE` capture while returning those exact same bytes. It was built and
+flashed on September 3, then a memory-only 0.5-second protocol probe reported a
+3% peak, returned all declared 16,000 audio bytes, emitted `END`, and remained
+responsive at the 96% default. No audio was persisted. This verifies framing and
+recovery but did not by itself establish board/offline parity.
+
+The first spoken diagnostic set exposed a concurrency race in the diagnostic
+scorer, so those board measurements were marked invalid and excluded without
+deleting their private WAVs. After changing firmware to score the frozen capture
+after collection, the user repeated two “Yo Franky” samples and one “Yo friendly
+people” hard negative. Board/offline peaks matched exactly at 100/100, 100/100,
+and 91/91. The offline evaluator is therefore validated for the current deployed
+pipeline.
+
+Two physically tuned candidates were trained in isolated ignored directories;
+neither changed the firmware model during training. Candidate v1 recovered every training-corpus
+positive but still activated on 5/20 hard negatives at 96%, so it was rejected.
+Candidate v2 scored every positive at 100% and reduced activations to 2/20 at
+96%. Its untouched synthetic/ambient test measured 2.0% false rejection and
+0.187 estimated false accepts per hour at the reported 95% point, and 3.33%
+false rejection with no observed false accepts at 98%. Candidate v2 remains
+provisional because all physical figures came from its training corpus. At the
+user's explicit request, it was subsequently built and flashed for a pragmatic
+trial before formal fresh-session acceptance. The board booted and the control
+board observed microWakeWord armed at the 96% default. The subsequent September
+3 trial above found poor live wake reliability and cue contamination despite
+the favorable reused-corpus scores.
 
 ## Purpose
 

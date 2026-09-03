@@ -120,6 +120,11 @@ public static class ControlBoardApplication
                 var gainDb = int.TryParse(request.Query["gainDb"], out var parsedGain)
                     ? parsedGain
                     : 30;
+                var boardPeakScorePercent = int.TryParse(
+                    request.Query["boardPeakScorePercent"],
+                    out var parsedBoardPeakScore)
+                    ? parsedBoardPeakScore
+                    : (int?)null;
                 var sample = await store.SaveAsync(
                     request.Query["category"].ToString(),
                     request.Body,
@@ -128,7 +133,9 @@ public static class ControlBoardApplication
                         request.Query["prompt"],
                         request.Query["distance"],
                         request.Query["orientation"],
-                        gainDb),
+                        gainDb,
+                        request.Query["purpose"],
+                        boardPeakScorePercent),
                     requestCancellation);
                 events.Write("wake_dataset.sample_saved", new Dictionary<string, object?>
                 {
